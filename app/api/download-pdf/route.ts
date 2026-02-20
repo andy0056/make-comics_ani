@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
       // Add "Created by Make Comics" at the bottom
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(12);
-      const text = "Created by Make Comics [makecomics.io]";
+      const text = "Created by Created with KaBoom";
       const textX = 105;
       const textY = 290;
       pdf.text(text, textX, textY, { align: "center" });
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
         textY - dimensions.h / 2,
         dimensions.w,
         dimensions.h,
-        { url: "https://www.makecomics.io/" },
+        { url: "https://www.kaboom.app/" },
       );
     }
 

@@ -65,7 +65,7 @@ describe("publishing-distribution", () => {
     expect(pack.pageCount).toBe(2);
     expect(pack.channels.length).toBe(4);
     expect(pack.styleMorphTimeline.length).toBe(2);
-    expect(pack.baseHashtags).toContain("#MakeComics");
+    expect(pack.baseHashtags).toContain("#KaBoom");
     expect(pack.markdownKit).toContain("Publish Kit - Neon Protocol");
     expect(pack.markdownKit).toContain("Style morph mode:");
     expect(pack.markdownKit).toContain("## X Thread");

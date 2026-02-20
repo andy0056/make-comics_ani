@@ -218,7 +218,7 @@ function extractThemeHashtags(
     .map(([token]) => `#${sentenceCaseToken(token)}`);
 
   const base = [
-    "#MakeComics",
+    "#KaBoom",
     "#AICreator",
     `#${sentenceCaseToken(style || "ComicStyle")}`,
   ];

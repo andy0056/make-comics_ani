@@ -100,7 +100,7 @@ export function SharePageClient({ storySlug }: { storySlug: string }) {
             <header className="sticky top-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-xl">
                 <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
                     <Link href="/" className="text-sm font-semibold text-white hover:text-indigo transition-colors">
-                        MakeComics
+                        KaBoom
                     </Link>
                     <div className="flex items-center gap-2">
                         <Button
@@ -170,7 +170,7 @@ export function SharePageClient({ storySlug }: { storySlug: string }) {
                     <p className="text-sm text-muted-foreground">
                         Made with{" "}
                         <Link href="/" className="font-medium text-indigo hover:underline">
-                            MakeComics
+                            KaBoom
                         </Link>
                     </p>
                     <Link href="/">

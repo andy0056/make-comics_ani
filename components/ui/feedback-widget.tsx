@@ -93,7 +93,7 @@ export function FeedbackWidget() {
                                 <Smile className="h-8 w-8 text-emerald-400" />
                                 <p className="font-medium text-white">Thanks for your feedback!</p>
                                 <p className="text-xs text-muted-foreground">
-                                    It helps us make MakeComics better.
+                                    It helps us make KaBoom better.
                                 </p>
                             </div>
                         ) : (

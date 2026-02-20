@@ -22,7 +22,7 @@ export class GlobalErrorBoundary extends React.Component<
     }
 
     componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-        console.error("[MakeComics Error Boundary]", error, errorInfo);
+        console.error("[KaBoom Error Boundary]", error, errorInfo);
     }
 
     render() {

@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
         });
 
         if (!res.ok) {
-            return { title: "Story Not Found | MakeComics" };
+            return { title: "Story Not Found | KaBoom" };
         }
 
         const data = await res.json();
@@ -23,23 +23,23 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
         const coverImage = data.pages?.[0]?.generatedImageUrl;
 
         return {
-            title: `${story.title} | MakeComics`,
-            description: story.description || `A ${story.style} comic created with MakeComics`,
+            title: `${story.title} | KaBoom`,
+            description: story.description || `A ${story.style} comic created with KaBoom`,
             openGraph: {
                 title: story.title,
-                description: story.description || `A ${story.style} comic created with MakeComics`,
+                description: story.description || `A ${story.style} comic created with KaBoom`,
                 images: coverImage ? [{ url: coverImage, width: 864, height: 1184 }] : [],
                 type: "article",
             },
             twitter: {
                 card: "summary_large_image",
                 title: story.title,
-                description: story.description || `A ${story.style} comic created with MakeComics`,
+                description: story.description || `A ${story.style} comic created with KaBoom`,
                 images: coverImage ? [coverImage] : [],
             },
         };
     } catch {
-        return { title: "MakeComics" };
+        return { title: "KaBoom" };
     }
 }
 

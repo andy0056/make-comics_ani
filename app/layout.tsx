@@ -31,12 +31,9 @@ const instrumentSerif = Instrument_Serif({
 })
 
 export const metadata: Metadata = {
-  title: "MakeComics - AI Comic Generator",
+  title: "KaBoom — AI Comic Creator",
   description:
     "Create stunning AI-generated comics in seconds. Choose your style, describe your story, and watch the magic happen.",
-  openGraph: {
-    images: "https://www.makecomics.io/og.png",
-  },
 }
 
 export default function RootLayout({
@@ -50,9 +47,7 @@ export default function RootLayout({
         lang="en"
         className={`${inter.variable} ${bangers.variable} ${spaceGrotesk.variable} ${instrumentSerif.variable}`}
       >
-        <head>
-          <PlausibleProvider domain="makecomics.io" />
-        </head>
+        <head />
         <body className="font-sans antialiased">
           <GlobalErrorBoundary>
             {children}
