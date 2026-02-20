@@ -1,0 +1,310 @@
+{
+  "name": "X_Image_Generation_Final_without_Upscaling",
+  "nodes": [
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1elU0u30K3vMFPi-FKTrjy4DAN34_AalRXAIxrvwUCoo",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1980831933,
+          "mode": "list",
+          "cachedResultName": "Scene 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1elU0u30K3vMFPi-FKTrjy4DAN34_AalRXAIxrvwUCoo/edit#gid=1980831933"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3632,
+        -192
+      ],
+      "id": "04388497-80b9-4d37-bbf2-3731a362fcf9",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vnom3D0RTBdpf3HV",
+          "name": "Google Sheets account 9"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# Manual → Get Google Sheet rows → Send to NanoBanana Pro API (batch 10, interval 2s) with metadata & character refs → Webhook handles results.",
+        "height": 560,
+        "width": 1504
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3136,
+        -464
+      ],
+      "id": "fc5ddea8-2398-40dc-9950-9c2df313739c",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "# Webhook receives completed NanoBanana tasks → JS parses scene & shot → Download image → Upload to Google Drive with scene-shot timestamp naming.",
+        "height": 560,
+        "width": 1920
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2928,
+        144
+      ],
+      "id": "762dbbc2-b33f-4813-8c73-b84bbaf1330a",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.kie.ai/api/v1/jobs/createTask",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer 3e100defac13d08284ffc08a8c635699"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"model\": \"nano-banana-pro\",\n  \"callBackUrl\": \"https://halloun.app.n8n.cloud/webhook/032702a6-655a-485f-8718-0a8b8be6208f\",\n  \"input\": {\n    \"prompt\": \"Description:\" + $json.Description + \",prompt:\" + $json.Prompt  + \",Style:\" + $json.Style + \",Scene:\" + $json.Scene + \",Shot:\" + $json.Shot,\n    \"aspect_ratio\": \"16:9\",\n    \"resolution\": \"2K\",\n    \"output_format\": \"png\",\n    ...($json.CharacterRef ? { \"image_input\": [$json.CharacterRef] } : {})\n  }\n} }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 120000
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4080,
+        -192
+      ],
+      "id": "104b7873-c8dd-4445-b3ec-ba69a170f4bd",
+      "name": "Send To NanoBanana Pro API"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nlet hasCreditError = false; // Flag to check credit issues\nconst validItems = [];\n\n// Loop through all API responses\nfor (const item of items) {\n    const apiResponse = item.json;\n\n    if (!apiResponse) continue;\n\n    // Check for credit error\n    if (apiResponse.code === 402) {\n        hasCreditError = true;\n        continue; // Skip this item from further processing\n    }\n\n    // Keep valid API responses for further processing\n    validItems.push(item);\n}\n\n// If credit error exists, notify user\nif (hasCreditError) {\n    return [\n        {\n            json: {\n                status: \"error\",\n                message: \"⚠️ Your credits are finished. Please top up to continue using the service.\"\n            }\n        }\n    ];\n}\n\n// If all good, pass valid items to next node\nreturn validItems;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4304,
+        -192
+      ],
+      "id": "8572dc1d-b610-4d67-806a-63db67f7abbc",
+      "name": "validation For ApI credit"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const data = item.json?.body?.data;\n  if (!data) continue;\n\n  if (data.state !== \"success\") continue;\n\n  // Parse resultJson\n  let result;\n  try {\n    result = JSON.parse(data.resultJson);\n  } catch {\n    continue;\n  }\n\n  // Parse param\n  let param;\n  try {\n    param = JSON.parse(data.param);\n  } catch {\n    continue;\n  }\n\n  // Extract prompt\n  const inputObj = JSON.parse(param.input || \"{}\");\n  const prompt = inputObj.prompt || \"\";\n\n  // Extract Scene & Shot from prompt\n  const sceneMatch = prompt.match(/Scene\\s*:\\s*(\\d+)/i);\n  const shotMatch = prompt.match(/Shot\\s*:\\s*(\\d+)/i);\n\n  const scene = sceneMatch ? sceneMatch[1] : \"NA\";\n  const shot = shotMatch ? shotMatch[1] : \"NA\";\n\n  output.push({\n    json: {\n      Key: `S${scene}-Shot${shot}`,\n      ImageURL: result.resultUrls?.[0] || null\n    }\n  });\n}\n\nreturn output;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3664,
+        448
+      ],
+      "id": "40683c2a-f089-4d3d-aef4-03b8b8cdef3d",
+      "name": "Parse Only ImageURL And Image Name"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Parse Only ImageURL And Image Name').item.json.ImageURL }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "={{ $('Parse Only ImageURL And Image Name').item.json.Key }}"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3888,
+        448
+      ],
+      "id": "fd175a35-ce15-4269-8be8-23c1f6d772cd",
+      "name": "Download Image"
+    },
+    {
+      "parameters": {
+        "inputDataFieldName": "={{ $('Parse Only ImageURL And Image Name').item.json.Key }}",
+        "name": "={{ `${$('Parse Only ImageURL And Image Name').item.json.Key.toLowerCase().replace('-', '_')}_${$now.toFormat('yyyyLLdd_HHmmss')}.png` }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive",
+          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1MU0eRiBAZVMj-_d7Go1CGX99lLRPEPwv",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        4112,
+        448
+      ],
+      "id": "12676828-e304-40a2-a642-54d798228aac",
+      "name": "Upload Photo In Drive",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "rMLQttCXTSCAiLvS",
+          "name": "Google Drive account 9"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        3408,
+        -192
+      ],
+      "id": "0c8e2f0c-c7cd-46f5-b636-55ec5978112f",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const data = item.json;\n\n  // If CharacterRef is empty, null, or only spaces → delete the key\n  if (\n    !data.CharacterRef ||\n    data.CharacterRef === null ||\n    data.CharacterRef.trim() === \"\"\n  ) {\n    delete data.CharacterRef;\n  } else {\n    // Convert Google Drive sharing link to direct download URL\n    const driveMatch = data.CharacterRef.match(/\\/d\\/([a-zA-Z0-9_-]+)/);\n    if (driveMatch && driveMatch[1]) {\n      const fileId = driveMatch[1];\n      data.CharacterRef = `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`;\n    }\n  }\n\n  return { json: data };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3856,
+        -192
+      ],
+      "id": "75ad4bb1-d35f-4aaf-8ad7-fb71e5d6c8f2",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "032702a6-655a-485f-8718-0a8b8be6208f",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        3440,
+        448
+      ],
+      "id": "244d261f-f7e1-4bab-92ba-7600abdf09c7",
+      "name": "Webhook",
+      "webhookId": "032702a6-655a-485f-8718-0a8b8be6208f"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send To NanoBanana Pro API": {
+      "main": [
+        [
+          {
+            "node": "validation For ApI credit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Only ImageURL And Image Name": {
+      "main": [
+        [
+          {
+            "node": "Download Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Image": {
+      "main": [
+        [
+          {
+            "node": "Upload Photo In Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send To NanoBanana Pro API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Only ImageURL And Image Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "496c9517-ba33-41c2-854e-5218f99682ea",
+  "meta": {
+    "instanceId": "9d532cbb2fcebbf1973dea4e516caf7d5de47406a8c15480c706f7b42d42eb16"
+  },
+  "id": "Yk6ZGddHTl2Q11ik",
+  "tags": []
+}

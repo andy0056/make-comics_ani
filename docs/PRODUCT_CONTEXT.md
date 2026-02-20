@@ -1,0 +1,398 @@
+# Product Context and Decision Log
+
+Last updated: 2026-02-15 22:30:06 +04:00
+Owner: Codex + User
+
+## Purpose
+This file captures durable product decisions and execution context so implementation can stay aligned while the fork diverges from upstream.
+
+## Confirmed Strategy
+- Primary focus now:
+  - editor UX speed and usability.
+- Fork strategy:
+  - intentional divergence from upstream project.
+- Near-term product targets:
+  - cleaner/faster workflow,
+  - retention and growth features,
+  - reliability controls.
+- Deferred area:
+  - deep model-output quality optimization (for later).
+
+## Confirmed Execution Preferences
+- Start with UX improvements first; instrumentation later.
+- Let implementation direction choose what is most product-sensible unless user requests otherwise.
+- Initial retention direction selected:
+  - template-driven creation help before heavier lifecycle nudges.
+- Primary signed-in destination selected:
+  - `/stories` should be the default entry.
+- Current UX selection for create-flow refresh:
+  - `1A`: guided-first prompting,
+  - `2A`: compact generation status panel,
+  - `3A`: single automatic retry,
+  - `4B`: friendly plain-language copy.
+
+## Product Principles
+- Optimize for low-friction comic creation and editing flow.
+- Prefer visible reliability improvements over hidden complexity.
+- Keep architecture flexible so model providers can change later.
+- Ship measurable UX improvements in small increments.
+
+## Current Technical Baseline
+- API contracts standardized with request correlation IDs.
+- Service boundaries introduced:
+  - story access/ownership service,
+  - AI orchestration service,
+  - DB/page lifecycle service.
+- Focused unit tests added for critical service logic.
+- DB runtime now supports both:
+  - local Postgres development (`pg` driver path),
+  - remote Neon HTTP connection path.
+
+## Phase 4 Candidate Workstreams
+- Editor Speed and Usability:
+  - trim editor wait states and unnecessary re-renders.
+  - improve action feedback timing (generate, redraw, add page, save title).
+  - strengthen error-recovery affordances in the editor UI.
+- Retention and Growth Foundations:
+  - activity cues and return-entry points for unfinished stories.
+  - lightweight creation prompts/templates to reduce blank-page friction.
+- Reliability Controls:
+  - resilient retries/backoff for external API calls where safe.
+  - clearer user-facing status for generation failures and recoverable states.
+
+## Implemented in Current UX Slice
+- Story-start and next-page prompt templates.
+- Randomized prompt suggestion shortcut.
+- Safer client request abstraction with timeout and request-id-aware error messaging.
+- Signed-in entrypoint routing:
+  - `/` now redirects authenticated users to `/stories`,
+  - `/create` is the dedicated manual creation path.
+- Stories retention/reliability UX:
+  - "Resume Unfinished Stories" section in library view,
+  - pending-page detection (`pendingPageCount`) surfaced from stories API,
+  - cache-backed stories fallback and explicit refresh action for recoverability.
+- Local reliability hardening:
+  - resolved `/api/stories` 500 caused by local DB/driver mismatch by adding local Postgres driver fallback and applying schema locally.
+- Credits/reliability hardening:
+  - graceful fallback when Upstash rate-limit env is missing/placeholder in local setup,
+  - explicit BYOK requirement messaging when server Together key is placeholder/missing.
+- Storage reliability hardening:
+  - explicit S3 placeholder/missing-config validation and route-level upload error surfacing with actionable messages.
+- Upload transport hardening:
+  - moved browser uploads to presigned mode and normalized `/api/s3-upload` error responses to guaranteed JSON for better client reliability.
+- Generation-pipeline verification hardening:
+  - verified Together model availability/connectivity locally and added client-side character upload timeouts to prevent indefinite pre-generation waits.
+- Guided generation UX transparency:
+  - guided prompt builder options (hero, goal, setting) with one-click prompt insertion,
+  - staged generation tracker (`credits` -> `uploads` -> `generation` -> `saving`) with elapsed time,
+  - one auto-retry for transient failures plus explicit manual retry and request reference display.
+- Editor action transparency/speed:
+  - add-page modal now uses compact staged generation status + one auto-retry + manual retry fallback,
+  - add-page credit check is skipped for BYOK users to reduce unnecessary latency,
+  - editor actions (add/redraw/title save) now expose clearer in-progress feedback and stronger duplicate-action guards.
+- Character memory moat foundations:
+  - story-level character bible is now persisted and editable in the editor,
+  - continuity prompt enrichment now injects character bible + consistency engine context into generation requests.
+- Creation loop foundations:
+  - editor now provides “suggested next beats” from story history and character context for faster continuation.
+- Character Bible UX polish:
+  - presets, inline validation, and image-link picker are now in the editor sheet,
+  - linked character bible images now participate directly in generation reference-image context.
+- Session control visibility:
+  - explicit sign-out controls are now available in editor toolbar and sidebar.
+- Create workspace refresh:
+  - `/create` now uses a focused single-workspace layout without the rotating preview rail.
+  - editor/form area is wider with a larger prompt input region for easier writing.
+  - GitHub/social promo links were removed from shared create surfaces to keep attention on creation flow.
+- Create workspace flow transparency v2:
+  - right-side panel now renders live generation activity (stage timeline + elapsed time + retry guidance).
+  - form now emits generation-state callbacks for parent-level activity surfaces.
+- Prompt acceleration:
+  - quick-start recipes (tone + genre + pacing) added to creation form for one-click prompt seeding.
+- Session recovery:
+  - `/create` now restores prompt/style draft state from session storage.
+  - character reference metadata is restored as context, with explicit re-upload guidance after refresh.
+- UX clarity polish:
+  - create activity panel now has stronger hierarchy (`Session Overview`, `Pipeline Activity`, `Operator Guidance`, `Reference Integrity`).
+  - next-action guidance is dynamic based on loading, error, and retry state to reduce user confusion.
+- Readability correction (user feedback driven):
+  - increased text scale and reduced micro-font usage across `/create` workspace.
+  - increased editor playground footprint and prompt writing area.
+  - reduced right-panel visual density to keep focus on the main creation surface.
+- Visual revamp direction (core surfaces):
+  - introduced a cohesive comic-native visual system for signed-in flow (`Navbar`, `/create`, `/stories`).
+  - added reusable themed surface/background/button primitives in global CSS.
+  - shifted away from indigo-heavy look toward warmer/cyan comic palette while preserving readability.
+- Story editor visual unification:
+  - applied the same comic design system to `story-editor-client` and `components/editor/*` core flows.
+  - normalized modal/dialog/button surfaces and accent language for a unified end-to-end experience.
+  - reduced remaining micro-font usage in editor controls for clearer readability.
+- Now-horizon moat foundations (v1):
+  - story world persistence (`story_worlds`) and character identity persistence (`character_dna_profiles`) are now in schema and API.
+  - continuity guardrails shipped with pre-generation violation checks and actionable fix suggestions.
+  - story health feedback loop shipped with clarity/continuity/pacing scoring and next-action guidance in editor.
+  - retention mission foundation shipped with open-mission sync and update flow on `/stories`.
+  - model abstraction/fallback foundation shipped to preserve provider flexibility and reliability.
+  - new now-horizon routes are active:
+    - `/api/stories/[storySlug]/world`,
+    - `/api/stories/[storySlug]/characters/dna`,
+    - `/api/stories/[storySlug]/continuity/check`,
+    - `/api/stories/[storySlug]/health`,
+    - `/api/missions`.
+- Next-horizon X1 start (v1):
+  - added `POST /api/autopilot/plan` and `lib/narrative-autopilot.ts` for multi-page narrative checkpoints.
+  - each checkpoint includes explicit panel choreography (5-panel plan) and adaptive dialogue beats.
+  - editor `Generate Page` modal now surfaces autopilot checkpoints with one-click `Use Beat` prompt insertion.
+- Next-horizon X1 increment (v2):
+  - autopilot now supports dialogue modes (`concise`, `balanced`, `cinematic`) and variable arc length (`2/3/4` pages) from editor UI.
+  - editor modal now supports one-click `Generate Beat` execution directly from autopilot checkpoints.
+  - users can still choose manual `Use Beat` for edit-before-generate control.
+- Next-horizon X1 increment (v3/v4):
+  - editor modal now supports queued multi-page execution from any checkpoint (`Run From Here`).
+  - queued flow generates pages sequentially across checkpoint range (`N -> N+1 -> ...`) using current add-page pipeline.
+  - checkpoint editor is now live in modal for beat title/summary, panel choreography, and dialogue beats before generation.
+- Next-horizon X1 hardening (queue controls):
+  - queue lifecycle controls are now available in modal activity panel (`Pause`, `Resume`, `Cancel queue`, `Retry failed beat`).
+  - queue sessions now preserve deterministic resume/retry state (`nextIndex`, failed checkpoint index, reused uploaded references).
+  - in-flight queue requests now support cancellation via propagated `AbortSignal` through client API utilities.
+- Next-horizon X2 start (personalization slice):
+  - added `Audience` mode controls to autopilot planning in editor modal (`General`, `Kids 8-12`, `Teen 13+`).
+  - autopilot preferences are now remembered locally (arc pages, dialogue mode, audience mode) and restored on open.
+  - autopilot service now receives audience mode and injects audience-specific planning guidance into model prompts.
+- Next-horizon X2 increment (Creator Twin server profile):
+  - added server-backed `Creator Twin` preference API (`/api/preferences/twin`) with authenticated get/update.
+  - editor modal now hydrates autopilot defaults from server profile first, with local fallback for resilience.
+  - preference changes are debounced and synced back to server, moving from local-only memory to account-level memory.
+- Next-horizon X2 finish pass (learning + importer):
+  - added passive-learning endpoint (`/api/preferences/twin/learn`) that adapts defaults from actual usage behavior.
+  - editor now emits learning signals from autopilot/page-generation outcomes and applies learned defaults live.
+  - added Memory Importer endpoint (`/api/import/memory`) with model-first extraction + fallback parsing and optional apply-to-story merge.
+  - generation modal now exposes Memory Importer controls, and imported preference signals can feed Creator Twin defaults.
+- Next-horizon X3 increment 1 (publishing/distribution flywheel v1):
+  - added publish-pack API (`POST /api/stories/[storySlug]/publish-pack`) for channel-ready distribution copy and asset packaging.
+  - added editor `Publishing Flywheel` sheet with tone/channel controls, per-channel caption packs, copy actions, and markdown export.
+  - added toolbar-level `Publish` entrypoint and in-sheet PDF shortcut so distribution can happen directly from editor workflow.
+- Next-horizon X3 increment 2 (style morph + emotion lock):
+  - publish-pack pipeline now supports style-morph timeline modes (`subtle`, `balanced`, `bold`) and exposes per-page visual transition guidance.
+  - publish-pack pipeline now supports emotion lock modes (`suspense`, `heroic`, `heartfelt`, `comedic`) with channel-specific emotion-locked caption variants.
+  - editor publishing sheet now includes style morph and emotion controls, timeline visualization, and copy-ready emotion-variant caption blocks.
+- Runtime model configuration update:
+  - default image generation baseline is now `google/gemini-3-pro-image` with `google/flash-image-2.5` fallback.
+  - image dimensions now follow configured primary image model, reducing mismatch risk when model defaults are switched.
+- Route resilience update:
+  - `/story` now redirects to `/stories` to prevent invalid slug-less route dead-ends and reduce navigation confusion.
+- Next-horizon X3 increment 3 (publishing autopipeline):
+  - added one-click autopipeline flow in the publishing sheet with explicit lifecycle states (`queued`, `running`, `completed`, `failed`) and retry.
+  - added backend autopipeline endpoint (`POST /api/stories/[storySlug]/autopipeline`) that returns a full export bundle (assets, captions, metadata, markdown, manifest files).
+  - autopipeline completion now gives immediate downloadable export package and manifest copy utility.
+- Next-horizon X3 increment 4 (distribution quality gates):
+  - added channel-level quality validation and severity scoring before distribution runs.
+  - publish sheet now surfaces ready/needs-fixes state, failed checks, and one-click quick-fix actions inline.
+  - autopipeline execution is now quality-gated by default to prevent low-quality export runs.
+- Moonshot M1 increment 1 (director-guided autopilot prototype):
+  - narrative autopilot now accepts optional `directorTranscript` guidance to steer camera/pacing direction.
+  - generate-page modal now includes a `Director Brief` input that can ingest voice transcript text.
+  - autopilot API validates and forwards this guidance, while continuity rules remain enforced.
+- Moonshot M1 increment 2 (voice capture + camera direction):
+  - generate-page modal now supports browser-native voice capture (mic start/stop + live interim transcript) for director brief drafting.
+  - autopilot controls now include camera-direction mode (`balanced`, `kinetic`, `cinematic`, `graphic_novel`).
+  - autopilot planning service and API now consume camera-direction mode and apply it to prompt guidance + fallback panel camera choreography.
+- Moonshot M1 increment 3 (voice-first polish + presets + preview):
+  - voice capture now includes session timer, live word count, and `Auto-plan on stop` session behavior.
+  - reusable director presets are now available (built-in + custom locally saved presets).
+  - camera-agent preview now shows either live checkpoint camera choreography or mode-based blueprint before generation.
+- Moonshot M1 increment 4 (shot scrubber + camera locks):
+  - autopilot now includes shot-level timeline scrubber controls (`P1..P5`) with active shot preview.
+  - per-panel camera lock controls were added before generation (both in scrubber and checkpoint editor).
+  - locked camera directives are now embedded in beat prompts to keep shot framing stable during generation.
+- Moonshot M1 increment 5 (shot continuity scoring + auto-fix):
+  - added shot continuity scoring for lock-heavy choreography with issue severity and readiness status.
+  - added one-click auto-fix suggestions for locked-camera conflicts directly in the shot scrubber panel.
+  - added normalization/defaulting for `cameraLocked` metadata to keep older autopilot payloads compatible.
+- Moonshot M2 increment 1 (Remix Graph foundation):
+  - added persisted lineage graph with `story_remixes` table and migration/push.
+  - added remix cloning pipeline (story/pages/character bible/world/DNA) and new `POST /api/stories/[storySlug]/remix`.
+  - stories and editor now expose remix actions and lineage context (`remixSourceStory`, `remixCount`, `remixLineage`).
+- Moonshot M2 increment 2 (interactive/shared universe layer):
+  - added universe graph API (`GET /api/stories/[storySlug]/universe`) with bounded lineage traversal and user-safe visibility filtering.
+  - added editor `Shared Universe` sheet for branch navigation and one-click branch creation from any node.
+  - added stories-entry deep link (`?panel=universe`) and toolbar `Universe` entrypoint for direct interactive access.
+- Moonshot M2 increment 3 (co-creation/shared editing controls):
+  - added persistent collaborator model (`story_collaborators`) with role-based access (`viewer`, `editor`, owner-managed).
+  - added collaborator management API (`GET|PUT|DELETE /api/stories/[storySlug]/collaborators`) and in-universe management controls.
+  - editor workflows now hydrate/obey access context (`canEdit`, `canManage`) while stories library now surfaces shared stories and roles.
+- Moonshot M2 increment 4 (real-time presence + conflict-safe locks):
+  - added live co-edit heartbeat API (`/api/stories/[storySlug]/presence`) with session cleanup on disconnect.
+  - added story-scoped lock API (`/api/stories/[storySlug]/locks`) and lock persistence tables for conflict-safe edits.
+  - server-side lock enforcement now protects title updates, page operations, and character-bible writes from concurrent collaborator conflicts.
+  - editor toolbar now surfaces collaborator presence and lock status, with action guardrails when a collaborator currently holds a lock.
+- Moonshot M2 increment 5 (shared universe activity feed):
+  - added universe activity API (`/api/stories/[storySlug]/universe/activity`) with event timeline and active branch summaries.
+  - universe sheet now shows live feed windows (`24h`, `7d`, `14d`, `30d`) and branch discovery actions.
+- Moonshot M2 increment 6 (interactive universe runner):
+  - added interactive universe API (`/api/stories/[storySlug]/universe/interactive`) for focus-episode pathing and branch-choice state.
+  - universe sheet now supports episode path traversal and branch-choice controls (`Focus`, `Open`, `Branch`) with recommendation hints.
+- Moonshot M2 increment 7 (co-creation room/session layer):
+  - added persisted room/session models and migration (`story_co_creation_rooms`, `story_co_creation_room_sessions`).
+  - added room/session APIs:
+    - `/api/stories/[storySlug]/co-creation/rooms`,
+    - `/api/stories/[storySlug]/co-creation/rooms/[roomId]/session`.
+  - universe sheet now includes room creation, join/leave session controls, and active participant session visibility.
+- Moonshot M2 increment 8 (room-aware conflict resolution):
+  - added conflict strategy service and endpoint:
+    - `lib/coedit-conflict-resolution.ts`,
+    - `/api/stories/[storySlug]/co-creation/conflicts`.
+  - lock conflict responses now include room/session-aware resolution hints across page/title/character edit APIs.
+  - presence/locks snapshots now include actionable `resolution` metadata for non-self locks, and editor lock toasts now surface these hints.
+- Moonshot M2 production hardening (conflict center + governance):
+  - added co-creation governance APIs:
+    - `/api/stories/[storySlug]/co-creation/audit`,
+    - `/api/stories/[storySlug]/co-creation/rooms/[roomId]` (archive + ownership transfer).
+  - room creation now emits audit events and room archive now force-closes active sessions for governance consistency.
+  - universe sheet now includes:
+    - a full `Conflict Center` with request-release + lock-handoff actions,
+    - room governance controls (archive/transfer owner),
+    - `Governance Audit` timeline UI for room/lock operations.
+- Moonshot M1 depth closure (voice cast + SFX pipeline path):
+  - added voice/SFX planning service:
+    - `lib/voice-cast-sfx.ts`,
+    - `/api/autopilot/voice-pack`.
+  - generate-page modal now includes a `Voice Cast + SFX Pipeline` panel with:
+    - pipeline generation action,
+    - cast + checkpoint cue preview,
+    - prompt-injection toggle to apply voice/SFX directives during page generation.
+  - voice-first flow now supports auto pipeline generation after transcript-driven autopilot planning.
+- Moonshot M3 increment 1 (IP incubator foundation):
+  - added creator-economy report engine:
+    - `lib/ip-incubator.ts`,
+    - `/api/stories/[storySlug]/ip-incubator`.
+  - report scores moat/retention/merchability/expansion readiness and returns pillar insights, merch concepts, and next experiments.
+  - publishing modal now surfaces an `M3 - IP Incubator` section with refreshable scorecards and execution guidance.
+- Moonshot M3 increment 2 (advanced merchability detector + experiment planner):
+  - added merchability signal engine:
+    - `lib/merchability-detector.ts`,
+    - `/api/stories/[storySlug]/merch-experiments` (`GET` detector, `POST` plan).
+  - detector now exposes motif/quote/character-hook signal depth, ranked experiment candidates, and readiness dimensions.
+  - publishing modal now includes planner controls (candidate/objective/budget/duration) and renders a phase-based merch experiment plan.
+- Moonshot M3 increment 3 (collaborative role agents):
+  - added role-agent orchestration engine:
+    - `lib/collaborative-role-agents.ts`,
+    - `/api/stories/[storySlug]/role-agents` (`GET` board, `POST` role plan).
+  - role board now models sprint objective + horizon, owner assignment/overrides, risk sync cadence, and per-role execution checklists.
+  - publishing modal now includes a dedicated `Collaborative Role Agents` panel with sprint controls, role owner controls, and one-click role-plan rebuild.
+- Moonshot M3 increment 4 (creator economy orchestration persistence):
+  - added unified orchestration engine:
+    - `lib/creator-economy-orchestrator.ts`,
+    - `/api/stories/[storySlug]/economy-orchestrator` (`GET` current plan, `POST` persist run, `PATCH` record outcome).
+  - added persistent run history storage:
+    - `story_creator_economy_runs` table with baseline/outcome metrics + run status/decision/notes.
+  - publishing modal now includes `Creator Economy Orchestrator` with:
+    - unified plan summary,
+    - run history timeline,
+    - outcome recording and delta summary loop.
+- Moonshot M3 increment 5 (agent automation + trigger-driven recommendations):
+  - added automation engine:
+    - `lib/creator-economy-automation.ts`,
+    - `/api/stories/[storySlug]/economy-automation` (`GET` trigger plan, `POST` execute recommendation as tracked run).
+  - trigger monitor now includes:
+    - foundation/retention/merch/role-coverage/stale-loop risks,
+    - scale-window opportunity detection.
+  - publishing modal now includes `M3 - Agent Automation`:
+    - trigger monitor,
+    - recommendation queue with owner readiness,
+    - one-click recommendation execution that persists into creator-economy run history.
+- Moonshot M3 increment 6 (autonomous backlog + decision-policy loops):
+  - added policy/backlog engine:
+    - `lib/creator-economy-policy.ts`,
+    - `decision policy + cooldown-limited backlog + bounded execution selector`.
+  - added autonomous APIs:
+    - `/api/stories/[storySlug]/economy-backlog` (`GET` policy/backlog, `POST` execute backlog recommendation),
+    - `/api/stories/[storySlug]/economy-autorun` (`POST` run guarded assist/auto cycle with optional dry-run).
+  - publishing modal now includes `M3 - Autonomous Loop`:
+    - mode controls (`manual`/`assist`/`auto`),
+    - policy summary + max-action cap,
+    - autonomous backlog execution and run-cycle controls.
+- Moonshot M3 increment 7 (policy-learning loops + autonomous outcome-closing agents):
+  - autonomous creator-economy loops now apply policy-learning adjustments from historical run outcomes.
+  - added policy-learning endpoint:
+    - `/api/stories/[storySlug]/economy-policy-learning` (learning report + adjusted policy/backlog snapshot).
+  - added outcome-closing agent endpoint:
+    - `/api/stories/[storySlug]/economy-outcome-agent` (`GET` closure candidates, `POST` bounded stale-run auto-close execution).
+  - publishing modal `M3 - Autonomous Loop` now includes:
+    - `Policy Learning Loop` telemetry (positive-rate/stale-run/suggested cadence),
+    - `Autonomous Outcome Agent` controls with preview + execute flows.
+  - creator-economy run history now closes feedback debt faster by auto-completing stale open runs with tracked outcome decisions/notes.
+- Moonshot M3 increment 8 (autonomy governance + force-safe control plane):
+  - added governance engine:
+    - `lib/creator-economy-governance.ts` with loop-health status (`healthy`/`watch`/`paused`) and action/cooldown constraints.
+  - backlog/autorun/policy-learning APIs now return governance reports and apply governance-clamped policy values.
+  - autorun now supports governance pause semantics with explicit force override (`force: true`) for emergency manual intervention.
+  - publishing modal `M3 - Autonomous Loop` now includes:
+    - `Autonomy Governance` telemetry panel,
+    - paused-state run guards,
+    - one-click `Force Run Once` override path when governance blocks execution.
+- Moonshot M3 increment 9 (autonomy optimizer + objective-driven tuning):
+  - added optimizer engine:
+    - `lib/creator-economy-optimizer.ts`,
+    - objective profiles (`stabilize`, `balanced`, `growth`) and recommendation logic from governance/learning/backlog signals.
+  - added optimizer API:
+    - `/api/stories/[storySlug]/economy-optimizer` (`GET` report/preview, `POST` objective simulation).
+  - publishing modal `M3 - Autonomous Loop` now includes:
+    - `Autonomy Optimizer` controls,
+    - recommended objective visibility,
+    - simulation/apply flows with policy preview and execution-preview transparency.
+- Moonshot M3 increment 10 (strategy cadence loops + guarded auto-optimization windows):
+  - added strategy-loop engine:
+    - `lib/creator-economy-strategy-loop.ts`,
+    - cadence planning (`6/8/12/18/24h`) + safe-window auto-opt enablement.
+  - added strategy-loop API:
+    - `/api/stories/[storySlug]/economy-strategy-loop` (`GET` report/preview, `POST` cadence/objective simulation).
+  - publishing modal `M3 - Autonomous Loop` now includes:
+    - `Strategy Loop Cadence` controls,
+    - 3-cycle schedule visibility (objective/mode/action/cooldown),
+    - cycle-1 control apply flow and execution-preview cards.
+- Moonshot M3 increment 11 (outcome-gated execution windows):
+  - added window-loop engine:
+    - `lib/creator-economy-window-loop.ts`,
+    - active-cycle gate states (`ready`/`hold`/`blocked`) + cadence adaptation from in-window outcomes.
+  - extended strategy-loop API:
+    - `/api/stories/[storySlug]/economy-strategy-loop` now supports window execution (`executeWindow`, `dryRun`, `persist`, `force`) and returns `windowReport` + executed/skipped telemetry.
+  - publishing modal `M3 - Autonomous Loop` now includes:
+    - `Outcome Gate` telemetry,
+    - `Window Dry Run` and `Execute Window` controls,
+    - adapted cadence/next-objective guidance from closed-loop outcomes.
+- Moonshot M3 increment 12 (self-healing policy escalation + ROI-closing recovery loops):
+  - added self-healing runtime controls on strategy loop:
+    - `GET|POST /api/stories/[storySlug]/economy-strategy-loop` now returns `selfHealingReport` and supports `selfHeal`/`executeRecovery` actions.
+  - strategy loop now persists recovery actions as first-class creator-economy runs (`source: economy_self_healing`) and re-evaluates governance/learning/window state post execution.
+  - publishing modal `M3 - Autonomous Loop` now includes:
+    - `Self-Healing Loop` telemetry (severity, ROI gap, patch controls, recovery queue),
+    - `Self-Heal Preview` and `Run Self-Heal` actions for operator-safe execution.
+- Runtime reliability hardening (post-increment console stabilization):
+  - editor presence and health polling now auto-disable after endpoint `404` to prevent repeated failing network spam while preserving core editing.
+  - page-generation suggestions now auto-disable after endpoint `404` and switch UI into explicit `Unavailable` state.
+  - generate-page modal now includes `DialogDescription` for Radix dialog accessibility compliance.
+- Story editor modal usability fix:
+  - generate/add-page modal is now wider on desktop, viewport-bounded (`max-h`) and internally scrollable for long sections.
+  - this removes clipping/cropping issues when autopilot, continuity, memory importer, and queue controls are all visible.
+
+## Roadmap Status Snapshot
+- Completed:
+  - `Now` foundations,
+  - `Next` milestones (`X1`, `X2`, `X3` including autopipeline quality gates).
+- In progress:
+  - `Moonshot` now includes completed M1 depth closure, M2 production hardening, and M3 increments 1-12.
+- Remaining:
+  - deeper `M1` multimodal input/output flows beyond voice/SFX planning (e.g., full generated audio assets),
+  - `M2` network universe scale and co-creation refinement blocks,
+  - `M3` increments 13+ (deeper creator-economy optimization and long-horizon autonomous governance).
+
+## Initial Success Signals (To Refine)
+- Time-to-first-comic-page decreases.
+- Fewer abandoned stories in first session.
+- Higher rate of returning to existing stories.
+- Lower generation failure drop-off.
+
+## Open Product Questions
+- Which retention mechanic should ship next after resume cards: milestones, streaks, or guided "finish your arc" nudges?
+- Should we add server-side retry/backoff for generation requests next, or prioritize additional editor interaction speed work first?
