@@ -12,7 +12,16 @@ import {
 function getBaseOrigin(request: NextRequest): string {
   const configuredBaseUrl = process.env.NEXT_PUBLIC_BASE_URL?.trim();
   if (configuredBaseUrl) {
-    return configuredBaseUrl.replace(/\/$/, "");
+    try {
+      const parsed = new URL(configuredBaseUrl);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        return parsed.origin;
+      }
+    } catch {
+      // Fall through to request origin.
+    }
+
+    console.error("Ignoring invalid NEXT_PUBLIC_BASE_URL for share links.");
   }
 
   return request.nextUrl.origin;

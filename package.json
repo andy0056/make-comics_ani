@@ -8,7 +8,7 @@
     "dev": "next dev",
     "lint": "eslint \"{app,components,hooks,lib}/**/*.{js,jsx,ts,tsx}\" \"*.{js,ts,mjs,cjs}\"",
     "test": "vitest run",
-    "test:hardening": "vitest run lib/api-generate-comic-route.test.ts lib/api-add-page-route.test.ts lib/api-delete-page-route.test.ts lib/api-chat-guide-route.test.ts lib/api-share-route.test.ts lib/api-story-route.test.ts lib/api-characters-route.test.ts lib/api-s3-upload-route.test.ts lib/s3-upload.test.ts lib/generation-idempotency.test.ts lib/api-download-pdf-route.test.ts lib/request-client.test.ts",
+    "test:hardening": "vitest run lib/api-generate-comic-route.test.ts lib/api-add-page-route.test.ts lib/api-delete-page-route.test.ts lib/api-chat-guide-route.test.ts lib/api-share-route.test.ts lib/api-story-route.test.ts lib/api-story-share-settings-route.test.ts lib/api-characters-route.test.ts lib/api-s3-upload-route.test.ts lib/s3-upload.test.ts lib/generation-idempotency.test.ts lib/api-download-pdf-route.test.ts lib/request-client.test.ts",
     "ci:hardening": "pnpm lint && pnpm build && pnpm test:hardening",
     "start": "next start"
   },
