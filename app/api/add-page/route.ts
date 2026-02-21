@@ -25,6 +25,10 @@ import {
   releaseGenerationIdempotency,
   type IdempotencyToken,
 } from "@/lib/generation-idempotency";
+import {
+  addPageRequestSchema,
+  getRequestValidationErrorMessage,
+} from "@/lib/api-request-validation";
 
 function isInvalidReferenceImageError(error: unknown) {
   if (!(error instanceof Error)) {
@@ -56,13 +60,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let requestBody: unknown;
+    try {
+      requestBody = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON body" },
+        { status: 400 },
+      );
+    }
+
+    const parsedRequest = addPageRequestSchema.safeParse(requestBody);
+    if (!parsedRequest.success) {
+      return NextResponse.json(
+        {
+          error: getRequestValidationErrorMessage(parsedRequest.error),
+        },
+        { status: 400 },
+      );
+    }
+
     const {
       storyId,
       pageId,
       prompt,
       panelLayout,
-      characterImages = [],
-    } = await request.json();
+      characterImages,
+    } = parsedRequest.data;
 
     const idempotencyResult = await acquireGenerationIdempotency({
       scope: pageId ? `add-page:redraw:${storyId}` : `add-page:new:${storyId}`,
@@ -87,13 +111,6 @@ export async function POST(request: NextRequest) {
     }
 
     idempotencyToken = idempotencyResult.token;
-
-    if (!storyId || !prompt) {
-      return NextResponse.json(
-        { error: "Missing required fields: storyId and prompt" },
-        { status: 400 },
-      );
-    }
 
     const finalApiKey = process.env.TOGETHER_API_KEY;
     if (!finalApiKey) {
