@@ -93,6 +93,10 @@ export const deletePageRequestSchema = z.object({
   pageId: pageIdSchema,
 });
 
+export const downloadPdfQuerySchema = z.object({
+  storySlug: storySlugSchema,
+});
+
 export const storyTitleUpdateRequestSchema = z.object({
   title: z.string().trim().min(1).max(MAX_TITLE_CHARS),
 });

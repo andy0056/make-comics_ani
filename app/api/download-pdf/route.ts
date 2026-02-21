@@ -2,6 +2,68 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { getStoryWithPagesBySlug } from "@/lib/db-actions";
 import { jsPDF } from "jspdf";
+import {
+  downloadPdfQuerySchema,
+  getRequestValidationErrorMessage,
+} from "@/lib/api-request-validation";
+import { validateSourceImageUrl } from "@/lib/s3-upload";
+
+const MAX_PDF_IMAGES = 120;
+const MAX_PDF_IMAGE_BYTES = 20 * 1024 * 1024;
+const PDF_IMAGE_FETCH_TIMEOUT_MS = 15_000;
+
+class PdfInputValidationError extends Error {}
+
+async function fetchPdfImageBuffer(url: string): Promise<Buffer> {
+  let sourceUrl: URL;
+  try {
+    sourceUrl = validateSourceImageUrl(url);
+  } catch {
+    throw new PdfInputValidationError("Invalid page image URL for PDF export.");
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PDF_IMAGE_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(sourceUrl.toString(), {
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${sourceUrl.toString()}`);
+    }
+
+    const contentType = response.headers
+      .get("content-type")
+      ?.split(";")[0]
+      ?.trim()
+      ?.toLowerCase();
+    if (!contentType || !contentType.startsWith("image/")) {
+      throw new PdfInputValidationError("Invalid image content type for PDF export.");
+    }
+
+    const contentLengthHeader = response.headers.get("content-length");
+    if (contentLengthHeader) {
+      const contentLength = Number.parseInt(contentLengthHeader, 10);
+      if (Number.isFinite(contentLength) && contentLength > MAX_PDF_IMAGE_BYTES) {
+        throw new PdfInputValidationError("Image too large for PDF export.");
+      }
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    if (buffer.length === 0) {
+      throw new PdfInputValidationError("Image data is empty.");
+    }
+    if (buffer.length > MAX_PDF_IMAGE_BYTES) {
+      throw new PdfInputValidationError("Image too large for PDF export.");
+    }
+
+    return buffer;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,14 +76,16 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const storySlug = searchParams.get("storySlug");
-
-    if (!storySlug) {
+    const parsedQuery = downloadPdfQuerySchema.safeParse({
+      storySlug: searchParams.get("storySlug"),
+    });
+    if (!parsedQuery.success) {
       return NextResponse.json(
-        { error: "Story slug required" },
+        { error: getRequestValidationErrorMessage(parsedQuery.error) },
         { status: 400 },
       );
     }
+    const { storySlug } = parsedQuery.data;
 
     const result = await getStoryWithPagesBySlug(storySlug);
     if (!result) {
@@ -34,7 +98,7 @@ export async function GET(request: NextRequest) {
     }
 
     const images = pages
-      .map((page: any) => page.generatedImageUrl)
+      .map((page: { generatedImageUrl: string | null }) => page.generatedImageUrl)
       .filter((url: string) => url && url !== "/placeholder.svg");
 
     if (images.length === 0) {
@@ -43,16 +107,15 @@ export async function GET(request: NextRequest) {
         { status: 400 },
       );
     }
+    if (images.length > MAX_PDF_IMAGES) {
+      return NextResponse.json(
+        { error: "Too many pages to export in a single PDF." },
+        { status: 400 },
+      );
+    }
 
     // Fetch all images server-side
-    const imagePromises = images.map(async (url: string) => {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${url}`);
-      }
-      const arrayBuffer = await response.arrayBuffer();
-      return Buffer.from(arrayBuffer);
-    });
+    const imagePromises = images.map((url: string) => fetchPdfImageBuffer(url));
 
     const imageBuffers = await Promise.all(imagePromises);
 
@@ -101,6 +164,9 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof PdfInputValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     console.error("Error generating PDF:", error);
     return NextResponse.json(
       { error: "Failed to generate PDF" },
