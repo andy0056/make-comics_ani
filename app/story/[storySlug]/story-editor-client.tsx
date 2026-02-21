@@ -75,6 +75,14 @@ function writeBotPanelPreference(isOpen: boolean): void {
   }
 }
 
+function createIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function StoryEditorClient() {
   const params = useParams();
   const slug = params.storySlug as string;
@@ -331,10 +339,12 @@ export function StoryEditorClient() {
     setLoadingPageId(currentPage);
 
     try {
+      const idempotencyKey = createIdempotencyKey();
       const response = await fetch("/api/add-page", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "x-idempotency-key": idempotencyKey,
         },
         body: JSON.stringify({
           storyId: story?.slug,
@@ -493,10 +503,12 @@ export function StoryEditorClient() {
     }
 
     // Add new page mode
+    const idempotencyKey = createIdempotencyKey();
     const response = await fetch("/api/add-page", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-idempotency-key": idempotencyKey,
       },
       body: JSON.stringify({
         storyId: story?.slug,

@@ -10,7 +10,6 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
   LayoutGrid,
   Shuffle,
 } from "lucide-react";
@@ -26,7 +25,7 @@ import type { CreateStep } from "@/components/landing/create-stepper";
 import type { CreateStatus } from "@/components/landing/create-status-rail";
 import { FirstRunHint } from "@/components/landing/first-run-hint";
 import { validateFileForUpload } from "@/lib/file-utils";
-import { STORY_SPARKS, getRandomSpark, getGenres, type StorySpark } from "@/lib/story-sparks";
+import { STORY_SPARKS, getGenres, type StorySpark } from "@/lib/story-sparks";
 import { PanelLayoutDiagram, StylePreviewChip } from "@/components/landing/visual-guides";
 
 interface ComicCreationFormProps {
@@ -78,6 +77,14 @@ export type GenerationProgressSnapshot = {
 };
 
 type GenerationStageState = "done" | "active" | "error" | "pending";
+
+function createIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export function getGenerationStageState({
   stageId,
@@ -201,7 +208,6 @@ export function ComicCreationForm({
     const shuffled = [...STORY_SPARKS].sort(() => Math.random() - 0.5);
     setDisplayedSparks(shuffled.slice(0, 3));
   }, []);
-  const [sparkHistory, setSparkHistory] = useState<string[]>([]);
   const [legacyProgress, setLegacyProgress] = useState<GenerationProgressSnapshot>({
     generationStage: null,
     failedStage: null,
@@ -592,10 +598,12 @@ export function ComicCreationForm({
         message: "Drawing your comic opening panel.",
       });
 
+      const idempotencyKey = createIdempotencyKey();
       const response = await fetch("/api/generate-comic", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "x-idempotency-key": idempotencyKey,
         },
         body: JSON.stringify({
           prompt,
@@ -704,19 +712,10 @@ export function ComicCreationForm({
     }
   };
 
-  const selectRecipe = (recipeId: string) => {
-    const recipe = QUICK_START_RECIPES.find((entry) => entry.id === recipeId);
-    if (!recipe) return;
-    setSelectedRecipeId(recipe.id);
-    setPrompt(recipe.prompt);
-    setPromptValidationMessage(null);
-  };
-
   const selectSpark = useCallback((spark: StorySpark) => {
     setSelectedRecipeId(spark.id);
     setPrompt(spark.prompt);
     setPromptValidationMessage(null);
-    setSparkHistory((prev) => [...prev, spark.id]);
   }, [setPrompt]);
 
   const shuffleSparks = useCallback(() => {

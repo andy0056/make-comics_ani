@@ -31,6 +31,7 @@ export async function createPage(data: {
   pageNumber: number;
   prompt: string;
   characterImageUrls: string[];
+  generatedImageUrl?: string | null;
 }): Promise<Page> {
   const [page] = await db.insert(pages).values(data).returning();
   return page;

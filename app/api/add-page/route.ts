@@ -6,9 +6,11 @@ import {
   createPage,
   getNextPageNumber,
   getStoryWithPagesBySlug,
-  deletePage,
 } from "@/lib/db-actions";
-import { freeTierRateLimit } from "@/lib/rate-limit";
+import {
+  reserveGenerationCredit,
+  refundGenerationCredit,
+} from "@/lib/rate-limit";
 import { uploadImageToS3 } from "@/lib/s3-upload";
 import { buildComicPrompt } from "@/lib/prompt";
 import {
@@ -16,6 +18,13 @@ import {
   mapTogetherGenerationError,
 } from "@/lib/comic-ai-service";
 import { getImageModelAdapterProfiles } from "@/lib/model-adapters";
+import {
+  acquireGenerationIdempotency,
+  completeGenerationIdempotency,
+  getIdempotencyKeyFromHeaders,
+  releaseGenerationIdempotency,
+  type IdempotencyToken,
+} from "@/lib/generation-idempotency";
 
 function isInvalidReferenceImageError(error: unknown) {
   if (!(error instanceof Error)) {
@@ -30,8 +39,15 @@ function isInvalidReferenceImageError(error: unknown) {
 }
 
 export async function POST(request: NextRequest) {
+  let userId: string | null = null;
+  let idempotencyToken: IdempotencyToken | null = null;
+  let idempotencyCompleted = false;
+  let creditReserved = false;
+  let creditCommitted = false;
+
   try {
-    const { userId } = await auth();
+    const authResult = await auth();
+    userId = authResult.userId;
 
     if (!userId) {
       return NextResponse.json(
@@ -47,6 +63,30 @@ export async function POST(request: NextRequest) {
       panelLayout,
       characterImages = [],
     } = await request.json();
+
+    const idempotencyResult = await acquireGenerationIdempotency({
+      scope: pageId ? `add-page:redraw:${storyId}` : `add-page:new:${storyId}`,
+      userId,
+      idempotencyKey: getIdempotencyKeyFromHeaders(request.headers),
+    });
+
+    if (idempotencyResult.kind === "replay") {
+      return NextResponse.json(idempotencyResult.body, {
+        status: idempotencyResult.status,
+      });
+    }
+
+    if (idempotencyResult.kind === "in_progress") {
+      return NextResponse.json(
+        {
+          error:
+            "A matching page generation request is already in progress. Please wait a moment and retry.",
+        },
+        { status: 409 },
+      );
+    }
+
+    idempotencyToken = idempotencyResult.token;
 
     if (!storyId || !prompt) {
       return NextResponse.json(
@@ -77,8 +117,8 @@ export async function POST(request: NextRequest) {
     }
 
     const isRedraw = Boolean(pageId);
-    let page;
-    let pageNumber;
+    let redrawPageId: string | null = null;
+    let pageNumber: number;
 
     if (isRedraw) {
       const existingPage = pages.find((p) => p.id === pageId);
@@ -86,14 +126,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Page not found" }, { status: 404 });
       }
 
-      page = existingPage;
+      redrawPageId = existingPage.id;
       pageNumber = existingPage.pageNumber;
     } else {
       pageNumber = await getNextPageNumber(story.id);
     }
 
-    // Consume credits only after auth + story/page validation has passed.
-    const rateLimitResult = await freeTierRateLimit.limit(userId);
+    // Reserve one credit before generation; refunded on any non-success path.
+    const rateLimitResult = await reserveGenerationCredit(userId);
     if (!rateLimitResult.success) {
       return NextResponse.json(
         {
@@ -106,15 +146,7 @@ export async function POST(request: NextRequest) {
         { status: 429 },
       );
     }
-
-    if (!isRedraw) {
-      page = await createPage({
-        storyId: story.id,
-        pageNumber,
-        prompt,
-        characterImageUrls: characterImages,
-      });
-    }
+    creditReserved = true;
 
     const adapters = getImageModelAdapterProfiles();
     const dimensions = adapters[0].dimensions;
@@ -177,15 +209,6 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       console.error("Image generation error:", error);
 
-      // Clean up on failure (for new pages, not redraws)
-      if (!isRedraw && page?.id) {
-        try {
-          await deletePage(page.id);
-        } catch (cleanupError) {
-          console.error("Error cleaning up DB on failure:", cleanupError);
-        }
-      }
-
       if (isInvalidReferenceImageError(error)) {
         return NextResponse.json(
           {
@@ -210,7 +233,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(
         {
-          error: `Internal server error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          error: "Generation failed. Please retry.",
         },
         { status: 500 },
       );
@@ -225,24 +248,66 @@ export async function POST(request: NextRequest) {
     }
 
     const imageUrl = response.data[0].url;
-    const s3Key = `${story.id}/page-${page.pageNumber}-${Date.now()}.jpg`;
+    const s3Key = `${story.id}/page-${pageNumber}-${Date.now()}.jpg`;
     const s3ImageUrl = await uploadImageToS3(imageUrl, s3Key);
 
-    await updatePage(page.id, s3ImageUrl);
+    let responseData: { imageUrl: string; pageId: string; pageNumber: number };
 
-    return NextResponse.json({
-      imageUrl: s3ImageUrl,
-      pageId: page.id,
-      pageNumber: page.pageNumber,
-    });
+    if (isRedraw) {
+      if (!redrawPageId) {
+        return NextResponse.json(
+          { error: "Failed to prepare redraw target." },
+          { status: 500 },
+        );
+      }
+
+      await updatePage(redrawPageId, s3ImageUrl);
+      responseData = {
+        imageUrl: s3ImageUrl,
+        pageId: redrawPageId,
+        pageNumber,
+      };
+    } else {
+      const page = await createPage({
+        storyId: story.id,
+        pageNumber,
+        prompt,
+        characterImageUrls: characterImages,
+        generatedImageUrl: s3ImageUrl,
+      });
+      responseData = {
+        imageUrl: s3ImageUrl,
+        pageId: page.id,
+        pageNumber: page.pageNumber,
+      };
+    }
+
+    creditCommitted = true;
+    if (idempotencyToken) {
+      await completeGenerationIdempotency({
+        token: idempotencyToken,
+        status: 200,
+        body: responseData,
+      });
+      idempotencyCompleted = true;
+    }
+
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error("Error in add-page API:", error);
     return NextResponse.json(
       {
-        error: `Internal server error: ${error instanceof Error ? error.message : "Unknown error"
-          }`,
+        error: "Internal server error.",
       },
       { status: 500 },
     );
+  } finally {
+    if (creditReserved && !creditCommitted && userId) {
+      await refundGenerationCredit(userId);
+    }
+
+    if (idempotencyToken && !idempotencyCompleted) {
+      await releaseGenerationIdempotency(idempotencyToken);
+    }
   }
 }

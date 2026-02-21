@@ -2,17 +2,16 @@ import { type NextRequest, NextResponse } from "next/server";
 import Together from "together-ai";
 import { auth } from "@clerk/nextjs/server";
 import {
-  updatePage,
-  updateStory,
   createStory,
   createPage,
   getNextPageNumber,
   getStoryById,
   getLastPageImage,
-  deletePage,
-  deleteStory,
 } from "@/lib/db-actions";
-import { freeTierRateLimit } from "@/lib/rate-limit";
+import {
+  reserveGenerationCredit,
+  refundGenerationCredit,
+} from "@/lib/rate-limit";
 import { uploadImageToS3 } from "@/lib/s3-upload";
 import { buildComicPrompt } from "@/lib/prompt";
 import {
@@ -21,6 +20,13 @@ import {
   mapTogetherGenerationError,
 } from "@/lib/comic-ai-service";
 import { getImageModelAdapterProfiles } from "@/lib/model-adapters";
+import {
+  acquireGenerationIdempotency,
+  completeGenerationIdempotency,
+  getIdempotencyKeyFromHeaders,
+  releaseGenerationIdempotency,
+  type IdempotencyToken,
+} from "@/lib/generation-idempotency";
 
 type ErrorInspection = {
   codes: Set<string>;
@@ -95,8 +101,15 @@ function isInvalidReferenceImageError(error: unknown) {
 }
 
 export async function POST(request: NextRequest) {
+  let userId: string | null = null;
+  let idempotencyToken: IdempotencyToken | null = null;
+  let idempotencyCompleted = false;
+  let creditReserved = false;
+  let creditCommitted = false;
+
   try {
-    const { userId } = await auth();
+    const authResult = await auth();
+    userId = authResult.userId;
 
     if (!userId) {
       return NextResponse.json(
@@ -114,6 +127,30 @@ export async function POST(request: NextRequest) {
       isContinuation = false,
       previousContext = "",
     } = await request.json();
+
+    const idempotencyResult = await acquireGenerationIdempotency({
+      scope: storyId ? `generate-comic:${storyId}` : "generate-comic:new-story",
+      userId,
+      idempotencyKey: getIdempotencyKeyFromHeaders(request.headers),
+    });
+
+    if (idempotencyResult.kind === "replay") {
+      return NextResponse.json(idempotencyResult.body, {
+        status: idempotencyResult.status,
+      });
+    }
+
+    if (idempotencyResult.kind === "in_progress") {
+      return NextResponse.json(
+        {
+          error:
+            "A matching generation request is already in progress. Please wait a moment and retry.",
+        },
+        { status: 409 },
+      );
+    }
+
+    idempotencyToken = idempotencyResult.token;
 
     if (!prompt) {
       return NextResponse.json(
@@ -135,7 +172,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let story;
+    let story: Awaited<ReturnType<typeof getStoryById>> | null = null;
+    let continuationPageNumber: number | null = null;
     const referenceImages: string[] = [];
 
     if (storyId) {
@@ -147,10 +185,18 @@ export async function POST(request: NextRequest) {
       if (story.userId !== userId) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
       }
+
+      continuationPageNumber = await getNextPageNumber(storyId);
+      if (continuationPageNumber > 1) {
+        const lastPageImage = await getLastPageImage(storyId);
+        if (lastPageImage) {
+          referenceImages.push(lastPageImage);
+        }
+      }
     }
 
-    // Consume credits only after auth + preflight validation has passed.
-    const rateLimitResult = await freeTierRateLimit.limit(userId);
+    // Reserve one credit before generation; refunded on any non-success path.
+    const rateLimitResult = await reserveGenerationCredit(userId);
     if (!rateLimitResult.success) {
       return NextResponse.json(
         {
@@ -163,45 +209,7 @@ export async function POST(request: NextRequest) {
         { status: 429 },
       );
     }
-
-    let page;
-    if (storyId) {
-      const nextPageNumber = await getNextPageNumber(storyId);
-      page = await createPage({
-        storyId,
-        pageNumber: nextPageNumber,
-        prompt,
-        characterImageUrls: characterImages,
-      });
-
-      // Get previous page image for style consistency (unless it's page 1)
-      if (nextPageNumber > 1) {
-        const lastPageImage = await getLastPageImage(storyId);
-        if (lastPageImage) {
-          referenceImages.push(lastPageImage);
-        }
-      }
-
-      // For continuation pages, character images are sent from frontend
-      // No need to fetch separately - frontend handles selection
-    } else {
-      // New story: no previous page reference
-      // Create story with temporary title, will update with generated title
-      story = await createStory({
-        title: prompt.length > 50 ? prompt.substring(0, 50) + "..." : prompt,
-        description: undefined,
-        userId: userId,
-        style,
-        usesOwnApiKey,
-      });
-
-      page = await createPage({
-        storyId: story.id,
-        pageNumber: 1,
-        prompt,
-        characterImageUrls: characterImages,
-      });
-    }
+    creditReserved = true;
 
     // Use only the character images sent from the frontend
     referenceImages.push(...characterImages);
@@ -255,17 +263,6 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       console.error("Image generation error:", error);
 
-      // Clean up DB records if generation failed
-      try {
-        if (!storyId) {
-          await deleteStory(story!.id);
-        } else {
-          await deletePage(page.id);
-        }
-      } catch (cleanupError) {
-        console.error("Error cleaning up DB on image generation failure:", cleanupError);
-      }
-
       if (isInvalidReferenceImageError(error)) {
         return NextResponse.json(
           {
@@ -291,7 +288,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(
         {
-          error: `Internal server error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          error: "Generation failed. Please retry.",
         },
         { status: 500 },
       );
@@ -307,9 +304,11 @@ export async function POST(request: NextRequest) {
 
     const imageUrl = response.data[0].url;
 
+    const pageNumberForAsset = continuationPageNumber ?? 1;
+    const s3KeyPrefix = story ? story.id : `user-${userId}`;
+
     // Upload image to S3 for permanent storage
-    const s3Key = `${storyId || story!.id}/page-${page.pageNumber
-      }-${Date.now()}.jpg`;
+    const s3Key = `${s3KeyPrefix}/page-${pageNumberForAsset}-${Date.now()}.jpg`;
     const s3ImageUrl = await uploadImageToS3(imageUrl, s3Key);
 
     // Wait for title/description generation if it's a new story
@@ -319,71 +318,90 @@ export async function POST(request: NextRequest) {
       const titleData = await titleGenerationPromise;
       generatedTitle = titleData.title;
       generatedDescription = titleData.description;
-
-      // Update story with generated title and description
-      try {
-        await updateStory(story!.id, {
-          title: generatedTitle,
-          description: generatedDescription,
-        });
-        // Update story object for response
-        story = {
-          ...story,
-          title: generatedTitle,
-          description: generatedDescription,
-        };
-      } catch (dbError) {
-        console.error("Error updating story title/description:", dbError);
-        // Continue even if update fails
-      }
     }
 
-    // Update page in database with S3 URL
-    try {
-      await updatePage(page.id, s3ImageUrl);
-    } catch (dbError) {
-      console.error("Error updating page in database:", dbError);
-      return NextResponse.json(
-        { error: "Failed to save generated image" },
-        { status: 500 },
-      );
+    let persistedStory = story;
+    let persistedPage;
+
+    if (storyId) {
+      if (!persistedStory || continuationPageNumber === null) {
+        return NextResponse.json(
+          { error: "Failed to prepare continuation page." },
+          { status: 500 },
+        );
+      }
+
+      persistedPage = await createPage({
+        storyId: persistedStory.id,
+        pageNumber: continuationPageNumber,
+        prompt,
+        characterImageUrls: characterImages,
+        generatedImageUrl: s3ImageUrl,
+      });
+    } else {
+      persistedStory = await createStory({
+        title: generatedTitle || fallbackTitle,
+        description: generatedDescription,
+        userId,
+        style,
+        usesOwnApiKey,
+      });
+
+      persistedPage = await createPage({
+        storyId: persistedStory.id,
+        pageNumber: 1,
+        prompt,
+        characterImageUrls: characterImages,
+        generatedImageUrl: s3ImageUrl,
+      });
     }
 
     const responseData = storyId
-      ? { imageUrl: s3ImageUrl, pageId: page.id, pageNumber: page.pageNumber }
+      ? {
+          imageUrl: s3ImageUrl,
+          pageId: persistedPage.id,
+          pageNumber: persistedPage.pageNumber,
+        }
       : {
-        imageUrl: s3ImageUrl,
-        storyId: story!.id,
-        storySlug: story!.slug,
-        pageId: page.id,
-        pageNumber: page.pageNumber,
-        title: generatedTitle || story!.title,
-        description: generatedDescription || story!.description,
-      };
+          imageUrl: s3ImageUrl,
+          storyId: persistedStory!.id,
+          storySlug: persistedStory!.slug,
+          pageId: persistedPage.id,
+          pageNumber: persistedPage.pageNumber,
+          title: persistedStory!.title,
+          description: persistedStory!.description,
+        };
+
+    creditCommitted = true;
+    if (idempotencyToken) {
+      await completeGenerationIdempotency({
+        token: idempotencyToken,
+        status: 200,
+        body: responseData,
+      });
+      idempotencyCompleted = true;
+    }
 
     return NextResponse.json(responseData);
   } catch (error) {
     console.error("Error in generate-comic API:", error);
-    const inspection = inspectError(error);
     const isDatabaseUnavailable = isDatabaseUnavailableError(error);
-    const detail =
-      process.env.NODE_ENV === "development"
-        ? {
-            message: error instanceof Error ? error.message : String(error),
-            codes: Array.from(inspection.codes),
-            causes: inspection.messages,
-          }
-        : undefined;
 
     return NextResponse.json(
       {
         error: isDatabaseUnavailable
           ? "Database unavailable. Ensure Postgres is running and DATABASE_URL is reachable."
-          : `Internal server error: ${error instanceof Error ? error.message : "Unknown error"
-            }`,
-        ...(detail ? { detail } : {}),
+          : "Internal server error.",
       },
       { status: isDatabaseUnavailable ? 503 : 500 },
     );
+  } finally {
+    if (creditReserved && !creditCommitted && userId) {
+      await refundGenerationCredit(userId);
+    }
+
+    if (idempotencyToken && !idempotencyCompleted) {
+      await releaseGenerationIdempotency(idempotencyToken);
+    }
   }
 }
