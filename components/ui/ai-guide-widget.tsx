@@ -56,6 +56,29 @@ export function AIGuideWidget() {
         }
     }, [messages, isOpen]);
 
+    // This effect hides the widget's native events from Radix UI's global document listeners.
+    // Radix Dialog normally steals focus and prevents pointer events outside of it. By stopping
+    // propagation here, Radix never sees the clicks/keystrokes, allowing native copy/paste
+    // and text selection to work flawlessly even when a Dialog is open!
+    useEffect(() => {
+        const widget = document.getElementById("kaboom-bot-widget");
+        if (!widget) return;
+
+        const stopEvent = (e: Event) => e.stopPropagation();
+
+        widget.addEventListener("pointerdown", stopEvent);
+        widget.addEventListener("mousedown", stopEvent);
+        widget.addEventListener("keydown", stopEvent);
+        widget.addEventListener("focusin", stopEvent);
+
+        return () => {
+            widget.removeEventListener("pointerdown", stopEvent);
+            widget.removeEventListener("mousedown", stopEvent);
+            widget.removeEventListener("keydown", stopEvent);
+            widget.removeEventListener("focusin", stopEvent);
+        };
+    }, []);
+
     const handleSend = async (text: string = input) => {
         if (!text.trim() || isLoading) return;
 

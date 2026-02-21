@@ -291,17 +291,11 @@ export function GeneratePageModal({
               e.preventDefault();
             }
           }}
-          onPointerDownOutside={(e) => {
-            const target = e.target as Element;
-            if (target.closest && target.closest('#kaboom-bot-widget')) {
-              // Prevent radix from stealing focus back when clicking bot
-              e.preventDefault();
-            }
-          }}
-          onFocusOutside={(e) => {
-            const target = e.target as Element;
-            if (target.closest && target.closest('#kaboom-bot-widget')) {
-              e.preventDefault();
+          onKeyDown={(e) => {
+            // Explicitly allow standard clipboard shortcuts to pass through unhindered
+            // so they work simultaneously in both the modal and the floating widget
+            if ((e.ctrlKey || e.metaKey) && ["c", "v", "x", "a"].includes(e.key.toLowerCase())) {
+              e.stopPropagation();
             }
           }}
           className="border border-border/50 rounded-lg bg-background max-w-3xl w-[95vw] max-h-[90vh] overflow-y-auto"
@@ -514,7 +508,7 @@ export function GeneratePageModal({
                       : "border-border/40 text-muted-foreground/70 hover:border-border/60 hover:text-white"
                       }`}
                   >
-                    <PanelLayoutDiagram layoutId={layout.id} size={14} />
+                    <PanelLayoutDiagram layoutId={layout.id} />
                     <span>{layout.panelCount}</span>
                   </button>
                 ))}
