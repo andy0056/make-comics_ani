@@ -7,6 +7,7 @@ import { getOwnedStoryWithPagesBySlug } from "@/lib/story-access";
 import {
   charactersUpdateRequestSchema,
   getRequestValidationErrorMessage,
+  storySlugParamSchema,
 } from "@/lib/api-request-validation";
 
 export async function GET(
@@ -19,7 +20,14 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const slug = (await params).storySlug;
+    const parsedParams = storySlugParamSchema.safeParse(await params);
+    if (!parsedParams.success) {
+      return NextResponse.json(
+        { error: getRequestValidationErrorMessage(parsedParams.error) },
+        { status: 400 },
+      );
+    }
+    const slug = parsedParams.data.storySlug;
     const accessResult = await getOwnedStoryWithPagesBySlug({
       storySlug: slug,
       userId,
@@ -68,7 +76,14 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const slug = (await params).storySlug;
+    const parsedParams = storySlugParamSchema.safeParse(await params);
+    if (!parsedParams.success) {
+      return NextResponse.json(
+        { error: getRequestValidationErrorMessage(parsedParams.error) },
+        { status: 400 },
+      );
+    }
+    const slug = parsedParams.data.storySlug;
     const accessResult = await getOwnedStoryWithPagesBySlug({
       storySlug: slug,
       userId,

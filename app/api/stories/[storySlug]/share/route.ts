@@ -6,6 +6,7 @@ import { stories } from "@/lib/schema";
 import {
   getRequestValidationErrorMessage,
   shareSettingsRequestSchema,
+  storySlugParamSchema,
 } from "@/lib/api-request-validation";
 
 function getBaseOrigin(request: NextRequest): string {
@@ -45,10 +46,14 @@ export async function GET(
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const { storySlug } = await params;
-    if (!storySlug) {
-      return NextResponse.json({ error: "Story slug is required" }, { status: 400 });
+    const parsedParams = storySlugParamSchema.safeParse(await params);
+    if (!parsedParams.success) {
+      return NextResponse.json(
+        { error: getRequestValidationErrorMessage(parsedParams.error) },
+        { status: 400 },
+      );
     }
+    const { storySlug } = parsedParams.data;
 
     const story = await getOwnedStory(storySlug, userId);
     if (!story) {
@@ -84,10 +89,14 @@ export async function POST(
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const { storySlug } = await params;
-    if (!storySlug) {
-      return NextResponse.json({ error: "Story slug is required" }, { status: 400 });
+    const parsedParams = storySlugParamSchema.safeParse(await params);
+    if (!parsedParams.success) {
+      return NextResponse.json(
+        { error: getRequestValidationErrorMessage(parsedParams.error) },
+        { status: 400 },
+      );
     }
+    const { storySlug } = parsedParams.data;
 
     const story = await getOwnedStory(storySlug, userId);
     if (!story) {
