@@ -290,7 +290,15 @@ export function GeneratePageModal({
       const characterUrls = await Promise.all(
         selectedCharacters.map(async (char) => {
           if (char.isNew && char.file) {
-            const { url } = await uploadToS3(char.file);
+            const { url } = await uploadToS3(char.file, {
+              endpoint: {
+                request: {
+                  body: {
+                    filesize: char.file.size,
+                  },
+                },
+              },
+            });
             return url;
           }
           return char.url;

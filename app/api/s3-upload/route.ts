@@ -1,6 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { POST as s3UploadHandler } from "next-s3-upload/route";
+import {
+  getRequestValidationErrorMessage,
+  s3UploadInitRequestSchema,
+} from "@/lib/api-request-validation";
 
 const REQUIRED_S3_ENV_VARS = [
   "S3_UPLOAD_KEY",
@@ -38,6 +42,35 @@ function getUploadFailureMessage() {
   return "Upload initialization failed. Check S3 credentials and bucket permissions.";
 }
 
+function getExtensionFromMimeType(filetype: string): "jpg" | "png" {
+  return filetype === "image/png" ? "png" : "jpg";
+}
+
+function sanitizeFilenameBase(filename: string): string {
+  const noExtension = filename.replace(/\.[^/.]+$/, "");
+  const normalized = noExtension
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return normalized.slice(0, 48) || "upload";
+}
+
+function buildUploadObjectKey({
+  userId,
+  filename,
+  filetype,
+}: {
+  userId: string;
+  filename: string;
+  filetype: string;
+}): string {
+  const extension = getExtensionFromMimeType(filetype);
+  const name = sanitizeFilenameBase(filename);
+  return `next-s3-uploads/${userId}/${Date.now()}-${crypto.randomUUID()}-${name}.${extension}`;
+}
+
 export async function POST(request: NextRequest) {
   const { userId } = await auth();
 
@@ -53,8 +86,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: configError }, { status: 500 });
   }
 
+  let requestBody: unknown;
   try {
-    const response = await s3UploadHandler(request);
+    requestBody = await request.clone().json();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid JSON body" },
+      { status: 400 },
+    );
+  }
+
+  const parsedRequest = s3UploadInitRequestSchema.safeParse(requestBody);
+  if (!parsedRequest.success) {
+    return NextResponse.json(
+      { error: getRequestValidationErrorMessage(parsedRequest.error) },
+      { status: 400 },
+    );
+  }
+
+  const configuredUploadHandler = s3UploadHandler.configure({
+    key: () =>
+      buildUploadObjectKey({
+        userId,
+        filename: parsedRequest.data.filename,
+        filetype: parsedRequest.data.filetype,
+      }),
+  });
+
+  try {
+    const response = await configuredUploadHandler(request);
     const contentType = response.headers.get("content-type") || "";
 
     if (!response.ok && !contentType.includes("application/json")) {

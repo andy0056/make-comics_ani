@@ -583,7 +583,17 @@ export function ComicCreationForm({
       });
 
       const characterUploads = await Promise.all(
-        characterFiles.map((file) => uploadToS3(file).then(({ url }) => url))
+        characterFiles.map((file) =>
+          uploadToS3(file, {
+            endpoint: {
+              request: {
+                body: {
+                  filesize: file.size,
+                },
+              },
+            },
+          }).then(({ url }) => url),
+        )
       );
 
       setLegacyProgress((current) => ({

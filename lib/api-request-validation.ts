@@ -13,6 +13,8 @@ const MAX_CHARACTER_NAME_CHARS = 60;
 const MAX_CHARACTER_ROLE_CHARS = 120;
 const MAX_CHARACTER_TEXT_CHARS = 500;
 const MAX_CHARACTERS = 6;
+const MAX_UPLOAD_FILENAME_CHARS = 180;
+const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
 
 const styleIds = new Set(COMIC_STYLES.map((style) => style.id));
 const panelLayoutIds = new Set(PANEL_LAYOUTS.map((layout) => layout.id));
@@ -144,6 +146,19 @@ export const charactersUpdateRequestSchema = z
       seenNames.add(normalizedName);
     }
   });
+
+const supportedUploadMimeTypes = ["image/jpeg", "image/png"] as const;
+
+export const s3UploadInitRequestSchema = z.object({
+  filename: z.string().trim().min(1).max(MAX_UPLOAD_FILENAME_CHARS),
+  filetype: z.enum(supportedUploadMimeTypes),
+  filesize: z.coerce.number().int().positive().max(MAX_UPLOAD_FILE_BYTES),
+  _nextS3: z
+    .object({
+      strategy: z.literal("presigned"),
+    })
+    .optional(),
+});
 
 export function getRequestValidationErrorMessage(error: z.ZodError): string {
   const issue = error.issues[0];
