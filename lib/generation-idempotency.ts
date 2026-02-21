@@ -2,6 +2,9 @@ import { Redis } from "@upstash/redis";
 
 const PROCESSING_TTL_SECONDS = 60 * 10;
 const COMPLETED_TTL_SECONDS = 60 * 60 * 24;
+const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
+const IDEMPOTENCY_KEY_MIN_LENGTH = 8;
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]+$/;
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -82,7 +85,15 @@ export function getIdempotencyKeyFromHeaders(headers: Headers): string | null {
     return null;
   }
 
-  return key.slice(0, 128);
+  if (
+    key.length < IDEMPOTENCY_KEY_MIN_LENGTH ||
+    key.length > IDEMPOTENCY_KEY_MAX_LENGTH ||
+    !IDEMPOTENCY_KEY_PATTERN.test(key)
+  ) {
+    return null;
+  }
+
+  return key;
 }
 
 export async function acquireGenerationIdempotency({
