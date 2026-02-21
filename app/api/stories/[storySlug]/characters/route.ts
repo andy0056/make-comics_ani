@@ -4,36 +4,10 @@ import { db } from "@/lib/db";
 import { storyCharacters } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { getOwnedStoryWithPagesBySlug } from "@/lib/story-access";
-
-type CharacterPayload = {
-  name: string;
-  role?: string;
-  appearance?: string;
-  personality?: string;
-  speechStyle?: string;
-  referenceImageUrl?: string;
-  isLocked?: boolean;
-};
-
-function normalizeCharactersInput(value: unknown): CharacterPayload[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .filter((item): item is CharacterPayload => typeof item === "object" && item !== null)
-    .map((item) => ({
-      name: typeof item.name === "string" ? item.name.trim() : "",
-      role: typeof item.role === "string" ? item.role : "",
-      appearance: typeof item.appearance === "string" ? item.appearance : "",
-      personality: typeof item.personality === "string" ? item.personality : "",
-      speechStyle: typeof item.speechStyle === "string" ? item.speechStyle : "",
-      referenceImageUrl:
-        typeof item.referenceImageUrl === "string" ? item.referenceImageUrl : "",
-      isLocked: typeof item.isLocked === "boolean" ? item.isLocked : true,
-    }))
-    .filter((item) => item.name.length > 0);
-}
+import {
+  charactersUpdateRequestSchema,
+  getRequestValidationErrorMessage,
+} from "@/lib/api-request-validation";
 
 export async function GET(
   _request: Request,
@@ -109,8 +83,22 @@ export async function PUT(
       );
     }
 
-    const body = await request.json();
-    const characters = normalizeCharactersInput(body?.characters);
+    let requestBody: unknown;
+    try {
+      requestBody = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    const parsedRequest = charactersUpdateRequestSchema.safeParse(requestBody);
+    if (!parsedRequest.success) {
+      return NextResponse.json(
+        { error: getRequestValidationErrorMessage(parsedRequest.error) },
+        { status: 400 },
+      );
+    }
+
+    const { characters } = parsedRequest.data;
 
     await db
       .delete(storyCharacters)
