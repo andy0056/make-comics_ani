@@ -1,6 +1,6 @@
 import { db } from './db';
-import { stories, pages, type Story, type Page } from './schema';
-import { eq } from 'drizzle-orm';
+import { stories, pages, storyCollaborators, type Story, type Page, type StoryCollaborator } from './schema';
+import { and, eq } from 'drizzle-orm';
 import { generateComicSlug } from './slug-generator';
 
 export async function createStory(data: { title: string; description?: string; userId: string; style?: string; usesOwnApiKey?: boolean }): Promise<Story> {
@@ -85,6 +85,22 @@ export async function getStoryWithPagesBySlug(slug: string): Promise<{ story: St
     story: storyResult[0],
     pages: storyPages,
   };
+}
+
+export async function getStoryCollaborator(data: {
+  storyId: string;
+  userId: string;
+}): Promise<StoryCollaborator | null> {
+  const result = await db
+    .select()
+    .from(storyCollaborators)
+    .where(and(
+      eq(storyCollaborators.storyId, data.storyId),
+      eq(storyCollaborators.userId, data.userId),
+    ))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
 }
 
 export async function getStoryCharacterImages(storyId: string): Promise<string[]> {
