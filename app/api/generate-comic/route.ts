@@ -2,15 +2,11 @@ import { type NextRequest, NextResponse } from "next/server";
 import Together from "together-ai";
 import { auth } from "@clerk/nextjs/server";
 import {
-  updatePage,
-  updateStory,
   createStory,
   createPage,
   getNextPageNumber,
   getStoryById,
   getLastPageImage,
-  deletePage,
-  deleteStory,
 } from "@/lib/db-actions";
 import {
   reserveGenerationCredit,
@@ -176,7 +172,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let story;
+    let story: Awaited<ReturnType<typeof getStoryById>> | null = null;
+    let continuationPageNumber: number | null = null;
     const referenceImages: string[] = [];
 
     if (storyId) {
@@ -187,6 +184,14 @@ export async function POST(request: NextRequest) {
       }
       if (story.userId !== userId) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      }
+
+      continuationPageNumber = await getNextPageNumber(storyId);
+      if (continuationPageNumber > 1) {
+        const lastPageImage = await getLastPageImage(storyId);
+        if (lastPageImage) {
+          referenceImages.push(lastPageImage);
+        }
       }
     }
 
@@ -205,45 +210,6 @@ export async function POST(request: NextRequest) {
       );
     }
     creditReserved = true;
-
-    let page;
-    if (storyId) {
-      const nextPageNumber = await getNextPageNumber(storyId);
-      page = await createPage({
-        storyId,
-        pageNumber: nextPageNumber,
-        prompt,
-        characterImageUrls: characterImages,
-      });
-
-      // Get previous page image for style consistency (unless it's page 1)
-      if (nextPageNumber > 1) {
-        const lastPageImage = await getLastPageImage(storyId);
-        if (lastPageImage) {
-          referenceImages.push(lastPageImage);
-        }
-      }
-
-      // For continuation pages, character images are sent from frontend
-      // No need to fetch separately - frontend handles selection
-    } else {
-      // New story: no previous page reference
-      // Create story with temporary title, will update with generated title
-      story = await createStory({
-        title: prompt.length > 50 ? prompt.substring(0, 50) + "..." : prompt,
-        description: undefined,
-        userId: userId,
-        style,
-        usesOwnApiKey,
-      });
-
-      page = await createPage({
-        storyId: story.id,
-        pageNumber: 1,
-        prompt,
-        characterImageUrls: characterImages,
-      });
-    }
 
     // Use only the character images sent from the frontend
     referenceImages.push(...characterImages);
@@ -297,17 +263,6 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       console.error("Image generation error:", error);
 
-      // Clean up DB records if generation failed
-      try {
-        if (!storyId) {
-          await deleteStory(story!.id);
-        } else {
-          await deletePage(page.id);
-        }
-      } catch (cleanupError) {
-        console.error("Error cleaning up DB on image generation failure:", cleanupError);
-      }
-
       if (isInvalidReferenceImageError(error)) {
         return NextResponse.json(
           {
@@ -349,9 +304,11 @@ export async function POST(request: NextRequest) {
 
     const imageUrl = response.data[0].url;
 
+    const pageNumberForAsset = continuationPageNumber ?? 1;
+    const s3KeyPrefix = story ? story.id : `user-${userId}`;
+
     // Upload image to S3 for permanent storage
-    const s3Key = `${storyId || story!.id}/page-${page.pageNumber
-      }-${Date.now()}.jpg`;
+    const s3Key = `${s3KeyPrefix}/page-${pageNumberForAsset}-${Date.now()}.jpg`;
     const s3ImageUrl = await uploadImageToS3(imageUrl, s3Key);
 
     // Wait for title/description generation if it's a new story
@@ -361,46 +318,58 @@ export async function POST(request: NextRequest) {
       const titleData = await titleGenerationPromise;
       generatedTitle = titleData.title;
       generatedDescription = titleData.description;
-
-      // Update story with generated title and description
-      try {
-        await updateStory(story!.id, {
-          title: generatedTitle,
-          description: generatedDescription,
-        });
-        // Update story object for response
-        story = {
-          ...story,
-          title: generatedTitle,
-          description: generatedDescription,
-        };
-      } catch (dbError) {
-        console.error("Error updating story title/description:", dbError);
-        // Continue even if update fails
-      }
     }
 
-    // Update page in database with S3 URL
-    try {
-      await updatePage(page.id, s3ImageUrl);
-    } catch (dbError) {
-      console.error("Error updating page in database:", dbError);
-      return NextResponse.json(
-        { error: "Failed to save generated image" },
-        { status: 500 },
-      );
+    let persistedStory = story;
+    let persistedPage;
+
+    if (storyId) {
+      if (!persistedStory || continuationPageNumber === null) {
+        return NextResponse.json(
+          { error: "Failed to prepare continuation page." },
+          { status: 500 },
+        );
+      }
+
+      persistedPage = await createPage({
+        storyId: persistedStory.id,
+        pageNumber: continuationPageNumber,
+        prompt,
+        characterImageUrls: characterImages,
+        generatedImageUrl: s3ImageUrl,
+      });
+    } else {
+      persistedStory = await createStory({
+        title: generatedTitle || fallbackTitle,
+        description: generatedDescription,
+        userId,
+        style,
+        usesOwnApiKey,
+      });
+
+      persistedPage = await createPage({
+        storyId: persistedStory.id,
+        pageNumber: 1,
+        prompt,
+        characterImageUrls: characterImages,
+        generatedImageUrl: s3ImageUrl,
+      });
     }
 
     const responseData = storyId
-      ? { imageUrl: s3ImageUrl, pageId: page.id, pageNumber: page.pageNumber }
+      ? {
+          imageUrl: s3ImageUrl,
+          pageId: persistedPage.id,
+          pageNumber: persistedPage.pageNumber,
+        }
       : {
           imageUrl: s3ImageUrl,
-          storyId: story!.id,
-          storySlug: story!.slug,
-          pageId: page.id,
-          pageNumber: page.pageNumber,
-          title: generatedTitle || story!.title,
-          description: generatedDescription || story!.description,
+          storyId: persistedStory!.id,
+          storySlug: persistedStory!.slug,
+          pageId: persistedPage.id,
+          pageNumber: persistedPage.pageNumber,
+          title: persistedStory!.title,
+          description: persistedStory!.description,
         };
 
     creditCommitted = true;

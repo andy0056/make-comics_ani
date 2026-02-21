@@ -6,7 +6,6 @@ import {
   createPage,
   getNextPageNumber,
   getStoryWithPagesBySlug,
-  deletePage,
 } from "@/lib/db-actions";
 import {
   reserveGenerationCredit,
@@ -118,8 +117,8 @@ export async function POST(request: NextRequest) {
     }
 
     const isRedraw = Boolean(pageId);
-    let page;
-    let pageNumber;
+    let redrawPageId: string | null = null;
+    let pageNumber: number;
 
     if (isRedraw) {
       const existingPage = pages.find((p) => p.id === pageId);
@@ -127,7 +126,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Page not found" }, { status: 404 });
       }
 
-      page = existingPage;
+      redrawPageId = existingPage.id;
       pageNumber = existingPage.pageNumber;
     } else {
       pageNumber = await getNextPageNumber(story.id);
@@ -148,15 +147,6 @@ export async function POST(request: NextRequest) {
       );
     }
     creditReserved = true;
-
-    if (!isRedraw) {
-      page = await createPage({
-        storyId: story.id,
-        pageNumber,
-        prompt,
-        characterImageUrls: characterImages,
-      });
-    }
 
     const adapters = getImageModelAdapterProfiles();
     const dimensions = adapters[0].dimensions;
@@ -219,15 +209,6 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       console.error("Image generation error:", error);
 
-      // Clean up on failure (for new pages, not redraws)
-      if (!isRedraw && page?.id) {
-        try {
-          await deletePage(page.id);
-        } catch (cleanupError) {
-          console.error("Error cleaning up DB on failure:", cleanupError);
-        }
-      }
-
       if (isInvalidReferenceImageError(error)) {
         return NextResponse.json(
           {
@@ -267,16 +248,39 @@ export async function POST(request: NextRequest) {
     }
 
     const imageUrl = response.data[0].url;
-    const s3Key = `${story.id}/page-${page.pageNumber}-${Date.now()}.jpg`;
+    const s3Key = `${story.id}/page-${pageNumber}-${Date.now()}.jpg`;
     const s3ImageUrl = await uploadImageToS3(imageUrl, s3Key);
 
-    await updatePage(page.id, s3ImageUrl);
+    let responseData: { imageUrl: string; pageId: string; pageNumber: number };
 
-    const responseData = {
-      imageUrl: s3ImageUrl,
-      pageId: page.id,
-      pageNumber: page.pageNumber,
-    };
+    if (isRedraw) {
+      if (!redrawPageId) {
+        return NextResponse.json(
+          { error: "Failed to prepare redraw target." },
+          { status: 500 },
+        );
+      }
+
+      await updatePage(redrawPageId, s3ImageUrl);
+      responseData = {
+        imageUrl: s3ImageUrl,
+        pageId: redrawPageId,
+        pageNumber,
+      };
+    } else {
+      const page = await createPage({
+        storyId: story.id,
+        pageNumber,
+        prompt,
+        characterImageUrls: characterImages,
+        generatedImageUrl: s3ImageUrl,
+      });
+      responseData = {
+        imageUrl: s3ImageUrl,
+        pageId: page.id,
+        pageNumber: page.pageNumber,
+      };
+    }
 
     creditCommitted = true;
     if (idempotencyToken) {
