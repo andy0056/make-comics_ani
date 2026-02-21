@@ -45,28 +45,34 @@ const panelLayoutSchema = z
     message: "Invalid panel layout",
   });
 
-export const generateComicRequestSchema = z.object({
-  storyId: storyIdSchema.optional(),
-  prompt: z.string().trim().min(1).max(MAX_PROMPT_CHARS),
-  style: styleSchema,
-  panelLayout: panelLayoutSchema,
-  characterImages: z.array(characterImageSchema).max(2).default([]),
-  isContinuation: z.boolean().default(false),
-  previousContext: z.string().max(MAX_CONTEXT_CHARS).default(""),
-});
+export const generateComicRequestSchema = z
+  .object({
+    storyId: storyIdSchema.optional(),
+    prompt: z.string().trim().min(1).max(MAX_PROMPT_CHARS),
+    style: styleSchema,
+    panelLayout: panelLayoutSchema,
+    characterImages: z.array(characterImageSchema).max(2).default([]),
+    isContinuation: z.boolean().default(false),
+    previousContext: z.string().max(MAX_CONTEXT_CHARS).default(""),
+  })
+  .strict();
 
-export const addPageRequestSchema = z.object({
-  storyId: storySlugSchema,
-  pageId: pageIdSchema.optional(),
-  prompt: z.string().trim().min(1).max(MAX_PROMPT_CHARS),
-  panelLayout: panelLayoutSchema,
-  characterImages: z.array(characterImageSchema).max(2).default([]),
-});
+export const addPageRequestSchema = z
+  .object({
+    storyId: storySlugSchema,
+    pageId: pageIdSchema.optional(),
+    prompt: z.string().trim().min(1).max(MAX_PROMPT_CHARS),
+    panelLayout: panelLayoutSchema,
+    characterImages: z.array(characterImageSchema).max(2).default([]),
+  })
+  .strict();
 
-const chatMessageSchema = z.object({
-  role: z.enum(["user", "assistant"]),
-  content: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
-});
+const chatMessageSchema = z
+  .object({
+    role: z.enum(["user", "assistant"]),
+    content: z.string().trim().min(1).max(MAX_MESSAGE_CHARS),
+  })
+  .strict();
 
 export const chatGuideRequestSchema = z
   .object({
@@ -74,6 +80,7 @@ export const chatGuideRequestSchema = z
     context: z.string().max(MAX_CONTEXT_CHARS).optional(),
     storySlug: storySlugSchema.nullish(),
   })
+  .strict()
   .superRefine((value, ctx) => {
     const totalMessageChars = value.messages.reduce(
       (total, message) => total + message.content.length,
@@ -88,10 +95,12 @@ export const chatGuideRequestSchema = z
     }
   });
 
-export const deletePageRequestSchema = z.object({
-  storySlug: storySlugSchema,
-  pageId: pageIdSchema,
-});
+export const deletePageRequestSchema = z
+  .object({
+    storySlug: storySlugSchema,
+    pageId: pageIdSchema,
+  })
+  .strict();
 
 export const downloadPdfQuerySchema = z.object({
   storySlug: storySlugSchema,
@@ -101,13 +110,17 @@ export const storySlugParamSchema = z.object({
   storySlug: storySlugSchema,
 });
 
-export const storyTitleUpdateRequestSchema = z.object({
-  title: z.string().trim().min(1).max(MAX_TITLE_CHARS),
-});
+export const storyTitleUpdateRequestSchema = z
+  .object({
+    title: z.string().trim().min(1).max(MAX_TITLE_CHARS),
+  })
+  .strict();
 
-export const shareSettingsRequestSchema = z.object({
-  action: z.enum(["enable", "disable", "rotate"]),
-});
+export const shareSettingsRequestSchema = z
+  .object({
+    action: z.enum(["enable", "disable", "rotate"]),
+  })
+  .strict();
 
 const SHARE_TOKEN_PATTERN = /^[a-f0-9]{32}$/i;
 
@@ -132,20 +145,23 @@ const characterReferenceUrlSchema = z
     message: "Invalid reference image URL",
   });
 
-const characterInputSchema = z.object({
-  name: z.string().trim().min(1).max(MAX_CHARACTER_NAME_CHARS),
-  role: z.string().trim().max(MAX_CHARACTER_ROLE_CHARS).default(""),
-  appearance: longTextSchema.default(""),
-  personality: longTextSchema.default(""),
-  speechStyle: longTextSchema.default(""),
-  referenceImageUrl: characterReferenceUrlSchema.default(""),
-  isLocked: z.boolean().default(true),
-});
+const characterInputSchema = z
+  .object({
+    name: z.string().trim().min(1).max(MAX_CHARACTER_NAME_CHARS),
+    role: z.string().trim().max(MAX_CHARACTER_ROLE_CHARS).default(""),
+    appearance: longTextSchema.default(""),
+    personality: longTextSchema.default(""),
+    speechStyle: longTextSchema.default(""),
+    referenceImageUrl: characterReferenceUrlSchema.default(""),
+    isLocked: z.boolean().default(true),
+  })
+  .strict();
 
 export const charactersUpdateRequestSchema = z
   .object({
     characters: z.array(characterInputSchema).max(MAX_CHARACTERS),
   })
+  .strict()
   .superRefine(({ characters }, ctx) => {
     const seenNames = new Set<string>();
     for (let index = 0; index < characters.length; index += 1) {

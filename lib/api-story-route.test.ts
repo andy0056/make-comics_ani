@@ -87,6 +87,21 @@ describe("api/stories/[storySlug] route", () => {
     expect(updateStoryMock).not.toHaveBeenCalled();
   });
 
+  it("rejects unknown title payload keys", async () => {
+    const response = await PUT(
+      buildRequest(JSON.stringify({ title: "New Title", debug: true })),
+      {
+        params: Promise.resolve({ storySlug: "story-slug" }),
+      },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: expect.stringMatching(/unrecognized|unknown/i),
+    });
+    expect(updateStoryMock).not.toHaveBeenCalled();
+  });
+
   it("trims title before update", async () => {
     const response = await PUT(
       buildRequest(JSON.stringify({ title: "  New Title  " })),

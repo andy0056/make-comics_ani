@@ -62,6 +62,25 @@ describe("api/delete-page route", () => {
     expect(deletePageMock).not.toHaveBeenCalled();
   });
 
+  it("rejects unknown payload keys", async () => {
+    const response = await DELETE(
+      buildRequest(
+        JSON.stringify({
+          storySlug: "story-slug",
+          pageId: PAGE_ID_1,
+          debug: true,
+        }),
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: expect.stringMatching(/unrecognized|unknown/i),
+    });
+    expect(getStoryWithPagesBySlugMock).not.toHaveBeenCalled();
+    expect(deletePageMock).not.toHaveBeenCalled();
+  });
+
   it("requires authentication", async () => {
     authMock.mockResolvedValueOnce({ userId: null });
 
