@@ -64,7 +64,16 @@ export function AIGuideWidget() {
         const widget = document.getElementById("kaboom-bot-widget");
         if (!widget) return;
 
-        const stopEvent = (e: Event) => e.stopPropagation();
+        const stopEvent = (e: Event) => {
+            if (e.type === "keydown") {
+                const ke = e as KeyboardEvent;
+                // Exempt standard clipboard/editing shortcuts so the OS can copy/paste/select natively
+                if ((ke.metaKey || ke.ctrlKey) && ["c", "v", "x", "a", "z"].includes(ke.key.toLowerCase())) {
+                    return;
+                }
+            }
+            e.stopPropagation();
+        };
 
         widget.addEventListener("pointerdown", stopEvent);
         widget.addEventListener("mousedown", stopEvent);
@@ -190,17 +199,33 @@ export function AIGuideWidget() {
                                 >
                                     {renderMarkdown(msg.content)}
                                     {msg.role === "assistant" && (
-                                        <button
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(msg.content);
-                                                setCopiedIndex(idx);
-                                                setTimeout(() => setCopiedIndex(null), 2000);
-                                            }}
-                                            className="absolute top-2 right-2 p-1 rounded-md bg-background/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background hover:text-white"
-                                            title="Copy to clipboard"
-                                        >
-                                            {copiedIndex === idx ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-                                        </button>
+                                        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            {/* Send to Editor Button */}
+                                            {pathname.includes("/story/") && (
+                                                <button
+                                                    onClick={() => {
+                                                        const event = new CustomEvent('kaboom:use-prompt', { detail: msg.content });
+                                                        document.dispatchEvent(event);
+                                                    }}
+                                                    className="p-1.5 rounded-md bg-background/80 text-indigo hover:bg-indigo hover:text-white shadow-sm border border-border/50"
+                                                    title="Send to Editor"
+                                                >
+                                                    <Sparkles className="h-3 w-3" />
+                                                </button>
+                                            )}
+                                            {/* Copy Button */}
+                                            <button
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(msg.content);
+                                                    setCopiedIndex(idx);
+                                                    setTimeout(() => setCopiedIndex(null), 2000);
+                                                }}
+                                                className="p-1.5 rounded-md bg-background/80 text-muted-foreground hover:bg-background hover:text-white shadow-sm border border-border/50"
+                                                title="Copy to clipboard"
+                                            >
+                                                {copiedIndex === idx ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
                             </div>

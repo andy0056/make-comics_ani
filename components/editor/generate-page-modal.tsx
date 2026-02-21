@@ -149,6 +149,15 @@ export function GeneratePageModal({
         if (index !== -1) defaultSelected.add(index);
       });
       setSelectedCharacterIndices(defaultSelected);
+
+      // Intelligently steal focus only if the user is not actively chatting with the bot
+      const activeEl = document.activeElement;
+      if (!activeEl?.closest('#kaboom-bot-widget')) {
+        // Small timeout allows the modal to finish animating in
+        setTimeout(() => {
+          textareaRef.current?.focus();
+        }, 50);
+      }
     }
   }, [isOpen, isRedrawMode, existingPrompt, existingCharacters, lastPageCharacters, previousPageCharacters, isAdvancedMode]);
 
@@ -169,9 +178,27 @@ export function GeneratePageModal({
       }
       return sparkPrompt;
     });
-    // Focus the textarea so user can edit
-    setTimeout(() => textareaRef.current?.focus(), 100);
+    // Focus immediately without a timeout to prevent async focus stealing during pastes
+    if (textareaRef.current && !document.activeElement?.closest('#kaboom-bot-widget')) {
+      textareaRef.current.focus();
+    }
   }, []);
+
+  // Listen for "Send to Editor" events from KaBoom Bot
+  useEffect(() => {
+    const handleBotPrompt = (e: CustomEvent<string>) => {
+      if (!isOpen) return; // Only process if the modal is actively open
+
+      // Clean up markdown formatting (remove bold asterisks)
+      const cleanedPrompt = e.detail.replace(/\*\*/g, '');
+      applySpark(cleanedPrompt);
+    };
+
+    document.addEventListener('kaboom:use-prompt', handleBotPrompt as EventListener);
+    return () => {
+      document.removeEventListener('kaboom:use-prompt', handleBotPrompt as EventListener);
+    };
+  }, [isOpen, applySpark]);
 
   const handleFiles = async (newFiles: FileList | null) => {
     if (!newFiles) return;
@@ -395,7 +422,6 @@ export function GeneratePageModal({
 
                 <textarea
                   ref={textareaRef}
-                  autoFocus
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder={
