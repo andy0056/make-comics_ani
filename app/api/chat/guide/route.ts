@@ -3,8 +3,9 @@ import Together from "together-ai";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
-// Define the API route response format 
-export const runtime = 'edge';
+import { getStoryWithPagesBySlug } from "@/lib/db-actions";
+
+// Define the API route response format
 
 const systemPrompt = `You are KaBoom Bot, the high-energy, friendly, and deeply knowledgeable AI guide for the KaBoom! comic creation platform. 
 
@@ -49,17 +50,38 @@ export async function POST(req: Request) {
             }
         }
 
-        const { messages, context } = await req.json();
+        const { messages, context, storySlug } = await req.json();
 
         if (!messages || !Array.isArray(messages)) {
             return NextResponse.json({ error: "Invalid messages format" }, { status: 400 });
         }
 
+        let databaseContext = "";
+        if (storySlug) {
+            try {
+                const storyData = await getStoryWithPagesBySlug(storySlug);
+                if (storyData) {
+                    databaseContext = `\n\n[DEEP STORY CONTEXT - The user is currently editing THIS specific story]
+Story Title: "${storyData.story.title}"
+Story Style: ${storyData.story.style}
+Generated Pages So Far: ${storyData.pages.length}
+
+${storyData.pages.length > 0 ? "Page Contents (What has happened so far):" : "No pages generated yet."}
+${storyData.pages.map(p => `Page ${p.pageNumber}: ${p.prompt}`).join('\n')}
+
+Use the above story data to give highly specific, tailored advice. Refer to characters, actions, and settings that the user has already established in these pages.`
+                }
+            } catch (e) {
+                console.error("Failed to fetch deeper story context for bot:", e);
+                // Continue without deep context if DB query fails.
+            }
+        }
+
         const together = new Together({ apiKey: process.env.TOGETHER_API_KEY });
 
         const contextualSystemPrompt = context
-            ? `${systemPrompt}\n\n[System Context - DO NOT MENTION THIS TO USER IN THIS FORMAT]\nThe user is currently on the following page in the application:\n${context}\nUse this context to inform your suggestions and guidance.`
-            : systemPrompt;
+            ? `${systemPrompt}\n\n[System Context - DO NOT MENTION THIS TO USER IN THIS FORMAT]\nThe user is currently on the following route in the application:\n${context}\n${databaseContext}\nUse this context to inform your suggestions and guidance.`
+            : systemPrompt + databaseContext;
 
         const response = await together.chat.completions.create({
             messages: [

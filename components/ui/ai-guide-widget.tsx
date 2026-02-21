@@ -65,6 +65,8 @@ export function AIGuideWidget() {
 
         try {
             const contextMsg = `Current Route: ${pathname}\nRoute Params: ${JSON.stringify(params, null, 2)}`;
+            const storySlug = params.storySlug as string | undefined;
+
             const response = await fetch("/api/chat/guide", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -73,7 +75,8 @@ export function AIGuideWidget() {
                         role: m.role,
                         content: m.content,
                     })),
-                    context: contextMsg
+                    context: contextMsg,
+                    storySlug: storySlug || null
                 }),
             });
 
