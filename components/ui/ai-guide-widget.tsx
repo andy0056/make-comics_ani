@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { usePathname, useParams } from "next/navigation";
 import { MessageCircle, X, Send, Bot, Sparkles, Zap, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -10,13 +11,29 @@ type Message = {
     content: string;
 };
 
-const SUGGESTED_ACTIONS = [
-    { icon: Sparkles, label: "Help me write a prompt", text: "I need help writing a prompt for a cyberpunk detective story." },
-    { icon: Zap, label: "Brainstorm ideas", text: "Can you give me 3 random comic book premise ideas?" },
-    { icon: HelpCircle, label: "How do styles work?", text: "What's the difference between Noir and Cinematic Anime styles?" },
-];
+const getSuggestedActions = (pathname: string) => {
+    if (pathname === "/stories") {
+        return [
+            { icon: Sparkles, label: "Manage stories", text: "How do I edit or delete my existing stories?" },
+            { icon: Zap, label: "Start new ideas", text: "I want to start a new comic. Give me 3 random premise ideas." },
+        ];
+    }
+    if (pathname.startsWith("/story/")) {
+        return [
+            { icon: Sparkles, label: "Next scene ideas", text: "What's a good cliffhanger or action sequence for the next panel?" },
+            { icon: HelpCircle, label: "Editor tools", text: "How do the Character Bible and Universe tabs work?" },
+        ];
+    }
+    return [
+        { icon: Sparkles, label: "Help me write a prompt", text: "I need help writing a prompt for a cyberpunk detective story." },
+        { icon: Zap, label: "Brainstorm ideas", text: "Can you give me 3 random comic book premise ideas?" },
+        { icon: HelpCircle, label: "How do styles work?", text: "What's the difference between Noir and Cinematic Anime styles?" },
+    ];
+};
 
 export function AIGuideWidget() {
+    const pathname = usePathname() || "/";
+    const params = useParams() || {};
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState<Message[]>([
         {
@@ -47,6 +64,7 @@ export function AIGuideWidget() {
         setIsLoading(true);
 
         try {
+            const contextMsg = `Current Route: ${pathname}\nRoute Params: ${JSON.stringify(params, null, 2)}`;
             const response = await fetch("/api/chat/guide", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -55,6 +73,7 @@ export function AIGuideWidget() {
                         role: m.role,
                         content: m.content,
                     })),
+                    context: contextMsg
                 }),
             });
 
@@ -168,7 +187,7 @@ export function AIGuideWidget() {
                                 Suggested
                             </h4>
                             <div className="flex flex-col gap-1.5">
-                                {SUGGESTED_ACTIONS.map((action, i) => (
+                                {getSuggestedActions(pathname).map((action, i) => (
                                     <button
                                         key={i}
                                         onClick={() => handleSend(action.text)}

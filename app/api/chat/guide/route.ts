@@ -49,7 +49,7 @@ export async function POST(req: Request) {
             }
         }
 
-        const { messages } = await req.json();
+        const { messages, context } = await req.json();
 
         if (!messages || !Array.isArray(messages)) {
             return NextResponse.json({ error: "Invalid messages format" }, { status: 400 });
@@ -57,11 +57,15 @@ export async function POST(req: Request) {
 
         const together = new Together({ apiKey: process.env.TOGETHER_API_KEY });
 
+        const contextualSystemPrompt = context
+            ? `${systemPrompt}\n\n[System Context - DO NOT MENTION THIS TO USER IN THIS FORMAT]\nThe user is currently on the following page in the application:\n${context}\nUse this context to inform your suggestions and guidance.`
+            : systemPrompt;
+
         const response = await together.chat.completions.create({
             messages: [
-                { role: "system", content: systemPrompt },
+                { role: "system", content: contextualSystemPrompt },
                 ...messages.map((m: any) => ({
-                    role: m.role === "user" ? "user" : "assistant",
+                    role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
                     content: m.content
                 }))
             ],
