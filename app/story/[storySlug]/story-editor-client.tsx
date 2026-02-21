@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { HelpCircle, Wand2, RefreshCw, Trash2, LayoutTemplate } from "lucide-react";
+import { AIGuideSidePanel } from "@/components/editor/ai-guide-side-panel";
 import { useParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@clerk/nextjs";
@@ -521,6 +523,7 @@ export function StoryEditorClient() {
             setCurrentPage((prev) => (prev > 0 ? prev - 1 : prev))
           }
         />
+        <AIGuideSidePanel />
       </div>
 
       <GeneratePageModal
