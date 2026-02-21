@@ -118,7 +118,7 @@ export function AIGuideWidget() {
     };
 
     return (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+        <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end">
             {/* Chat Window */}
             {isOpen && (
                 <div className="mb-4 w-[340px] sm:w-[380px] origin-bottom-right animate-in fade-in slide-in-from-bottom-5 overflow-hidden rounded-xl border-2 border-border bg-background shadow-[6px_6px_0px_0px_var(--color-comic-yellow)] flex flex-col h-[500px] max-h-[80vh]">
