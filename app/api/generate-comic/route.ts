@@ -12,7 +12,10 @@ import {
   deletePage,
   deleteStory,
 } from "@/lib/db-actions";
-import { freeTierRateLimit } from "@/lib/rate-limit";
+import {
+  reserveGenerationCredit,
+  refundGenerationCredit,
+} from "@/lib/rate-limit";
 import { uploadImageToS3 } from "@/lib/s3-upload";
 import { buildComicPrompt } from "@/lib/prompt";
 import {
@@ -21,6 +24,13 @@ import {
   mapTogetherGenerationError,
 } from "@/lib/comic-ai-service";
 import { getImageModelAdapterProfiles } from "@/lib/model-adapters";
+import {
+  acquireGenerationIdempotency,
+  completeGenerationIdempotency,
+  getIdempotencyKeyFromHeaders,
+  releaseGenerationIdempotency,
+  type IdempotencyToken,
+} from "@/lib/generation-idempotency";
 
 type ErrorInspection = {
   codes: Set<string>;
@@ -95,8 +105,15 @@ function isInvalidReferenceImageError(error: unknown) {
 }
 
 export async function POST(request: NextRequest) {
+  let userId: string | null = null;
+  let idempotencyToken: IdempotencyToken | null = null;
+  let idempotencyCompleted = false;
+  let creditReserved = false;
+  let creditCommitted = false;
+
   try {
-    const { userId } = await auth();
+    const authResult = await auth();
+    userId = authResult.userId;
 
     if (!userId) {
       return NextResponse.json(
@@ -114,6 +131,30 @@ export async function POST(request: NextRequest) {
       isContinuation = false,
       previousContext = "",
     } = await request.json();
+
+    const idempotencyResult = await acquireGenerationIdempotency({
+      scope: storyId ? `generate-comic:${storyId}` : "generate-comic:new-story",
+      userId,
+      idempotencyKey: getIdempotencyKeyFromHeaders(request.headers),
+    });
+
+    if (idempotencyResult.kind === "replay") {
+      return NextResponse.json(idempotencyResult.body, {
+        status: idempotencyResult.status,
+      });
+    }
+
+    if (idempotencyResult.kind === "in_progress") {
+      return NextResponse.json(
+        {
+          error:
+            "A matching generation request is already in progress. Please wait a moment and retry.",
+        },
+        { status: 409 },
+      );
+    }
+
+    idempotencyToken = idempotencyResult.token;
 
     if (!prompt) {
       return NextResponse.json(
@@ -149,8 +190,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Consume credits only after auth + preflight validation has passed.
-    const rateLimitResult = await freeTierRateLimit.limit(userId);
+    // Reserve one credit before generation; refunded on any non-success path.
+    const rateLimitResult = await reserveGenerationCredit(userId);
     if (!rateLimitResult.success) {
       return NextResponse.json(
         {
@@ -163,6 +204,7 @@ export async function POST(request: NextRequest) {
         { status: 429 },
       );
     }
+    creditReserved = true;
 
     let page;
     if (storyId) {
@@ -291,7 +333,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(
         {
-          error: `Internal server error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          error: "Generation failed. Please retry.",
         },
         { status: 500 },
       );
@@ -352,38 +394,45 @@ export async function POST(request: NextRequest) {
     const responseData = storyId
       ? { imageUrl: s3ImageUrl, pageId: page.id, pageNumber: page.pageNumber }
       : {
-        imageUrl: s3ImageUrl,
-        storyId: story!.id,
-        storySlug: story!.slug,
-        pageId: page.id,
-        pageNumber: page.pageNumber,
-        title: generatedTitle || story!.title,
-        description: generatedDescription || story!.description,
-      };
+          imageUrl: s3ImageUrl,
+          storyId: story!.id,
+          storySlug: story!.slug,
+          pageId: page.id,
+          pageNumber: page.pageNumber,
+          title: generatedTitle || story!.title,
+          description: generatedDescription || story!.description,
+        };
+
+    creditCommitted = true;
+    if (idempotencyToken) {
+      await completeGenerationIdempotency({
+        token: idempotencyToken,
+        status: 200,
+        body: responseData,
+      });
+      idempotencyCompleted = true;
+    }
 
     return NextResponse.json(responseData);
   } catch (error) {
     console.error("Error in generate-comic API:", error);
-    const inspection = inspectError(error);
     const isDatabaseUnavailable = isDatabaseUnavailableError(error);
-    const detail =
-      process.env.NODE_ENV === "development"
-        ? {
-            message: error instanceof Error ? error.message : String(error),
-            codes: Array.from(inspection.codes),
-            causes: inspection.messages,
-          }
-        : undefined;
 
     return NextResponse.json(
       {
         error: isDatabaseUnavailable
           ? "Database unavailable. Ensure Postgres is running and DATABASE_URL is reachable."
-          : `Internal server error: ${error instanceof Error ? error.message : "Unknown error"
-            }`,
-        ...(detail ? { detail } : {}),
+          : "Internal server error.",
       },
       { status: isDatabaseUnavailable ? 503 : 500 },
     );
+  } finally {
+    if (creditReserved && !creditCommitted && userId) {
+      await refundGenerationCredit(userId);
+    }
+
+    if (idempotencyToken && !idempotencyCompleted) {
+      await releaseGenerationIdempotency(idempotencyToken);
+    }
   }
 }

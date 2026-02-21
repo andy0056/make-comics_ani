@@ -16,3 +16,15 @@ export const freeTierRateLimit = new Ratelimit({
   analytics: true,
   prefix: "ratelimit:free-comics",
 })
+
+export async function reserveGenerationCredit(userId: string) {
+  return freeTierRateLimit.limit(userId);
+}
+
+export async function refundGenerationCredit(userId: string) {
+  try {
+    await freeTierRateLimit.limit(userId, { rate: -1 });
+  } catch (error) {
+    console.error("Failed to refund generation credit:", error);
+  }
+}

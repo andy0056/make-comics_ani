@@ -8,7 +8,10 @@ import {
   getStoryWithPagesBySlug,
   deletePage,
 } from "@/lib/db-actions";
-import { freeTierRateLimit } from "@/lib/rate-limit";
+import {
+  reserveGenerationCredit,
+  refundGenerationCredit,
+} from "@/lib/rate-limit";
 import { uploadImageToS3 } from "@/lib/s3-upload";
 import { buildComicPrompt } from "@/lib/prompt";
 import {
@@ -16,6 +19,13 @@ import {
   mapTogetherGenerationError,
 } from "@/lib/comic-ai-service";
 import { getImageModelAdapterProfiles } from "@/lib/model-adapters";
+import {
+  acquireGenerationIdempotency,
+  completeGenerationIdempotency,
+  getIdempotencyKeyFromHeaders,
+  releaseGenerationIdempotency,
+  type IdempotencyToken,
+} from "@/lib/generation-idempotency";
 
 function isInvalidReferenceImageError(error: unknown) {
   if (!(error instanceof Error)) {
@@ -30,8 +40,15 @@ function isInvalidReferenceImageError(error: unknown) {
 }
 
 export async function POST(request: NextRequest) {
+  let userId: string | null = null;
+  let idempotencyToken: IdempotencyToken | null = null;
+  let idempotencyCompleted = false;
+  let creditReserved = false;
+  let creditCommitted = false;
+
   try {
-    const { userId } = await auth();
+    const authResult = await auth();
+    userId = authResult.userId;
 
     if (!userId) {
       return NextResponse.json(
@@ -47,6 +64,30 @@ export async function POST(request: NextRequest) {
       panelLayout,
       characterImages = [],
     } = await request.json();
+
+    const idempotencyResult = await acquireGenerationIdempotency({
+      scope: pageId ? `add-page:redraw:${storyId}` : `add-page:new:${storyId}`,
+      userId,
+      idempotencyKey: getIdempotencyKeyFromHeaders(request.headers),
+    });
+
+    if (idempotencyResult.kind === "replay") {
+      return NextResponse.json(idempotencyResult.body, {
+        status: idempotencyResult.status,
+      });
+    }
+
+    if (idempotencyResult.kind === "in_progress") {
+      return NextResponse.json(
+        {
+          error:
+            "A matching page generation request is already in progress. Please wait a moment and retry.",
+        },
+        { status: 409 },
+      );
+    }
+
+    idempotencyToken = idempotencyResult.token;
 
     if (!storyId || !prompt) {
       return NextResponse.json(
@@ -92,8 +133,8 @@ export async function POST(request: NextRequest) {
       pageNumber = await getNextPageNumber(story.id);
     }
 
-    // Consume credits only after auth + story/page validation has passed.
-    const rateLimitResult = await freeTierRateLimit.limit(userId);
+    // Reserve one credit before generation; refunded on any non-success path.
+    const rateLimitResult = await reserveGenerationCredit(userId);
     if (!rateLimitResult.success) {
       return NextResponse.json(
         {
@@ -106,6 +147,7 @@ export async function POST(request: NextRequest) {
         { status: 429 },
       );
     }
+    creditReserved = true;
 
     if (!isRedraw) {
       page = await createPage({
@@ -210,7 +252,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(
         {
-          error: `Internal server error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          error: "Generation failed. Please retry.",
         },
         { status: 500 },
       );
@@ -230,19 +272,38 @@ export async function POST(request: NextRequest) {
 
     await updatePage(page.id, s3ImageUrl);
 
-    return NextResponse.json({
+    const responseData = {
       imageUrl: s3ImageUrl,
       pageId: page.id,
       pageNumber: page.pageNumber,
-    });
+    };
+
+    creditCommitted = true;
+    if (idempotencyToken) {
+      await completeGenerationIdempotency({
+        token: idempotencyToken,
+        status: 200,
+        body: responseData,
+      });
+      idempotencyCompleted = true;
+    }
+
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error("Error in add-page API:", error);
     return NextResponse.json(
       {
-        error: `Internal server error: ${error instanceof Error ? error.message : "Unknown error"
-          }`,
+        error: "Internal server error.",
       },
       { status: 500 },
     );
+  } finally {
+    if (creditReserved && !creditCommitted && userId) {
+      await refundGenerationCredit(userId);
+    }
+
+    if (idempotencyToken && !idempotencyCompleted) {
+      await releaseGenerationIdempotency(idempotencyToken);
+    }
   }
 }
