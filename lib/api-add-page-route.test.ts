@@ -136,6 +136,23 @@ describe("api/add-page route", () => {
     mapTogetherGenerationErrorMock.mockReturnValue(null);
   });
 
+  it("rejects invalid payload before idempotency and credit reservation", async () => {
+    const response = await POST(
+      buildRequest({
+        storyId: "story-slug",
+        prompt: "continue",
+        panelLayout: "invalid-layout",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: expect.stringContaining("panelLayout"),
+    });
+    expect(acquireGenerationIdempotencyMock).not.toHaveBeenCalled();
+    expect(reserveGenerationCreditMock).not.toHaveBeenCalled();
+  });
+
   it("replays cached result and skips credit reservation", async () => {
     acquireGenerationIdempotencyMock.mockResolvedValueOnce({
       kind: "replay",

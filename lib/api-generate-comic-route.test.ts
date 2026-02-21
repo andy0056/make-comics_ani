@@ -135,6 +135,19 @@ describe("api/generate-comic route", () => {
     mapTogetherGenerationErrorMock.mockReturnValue(null);
   });
 
+  it("rejects invalid payload before idempotency and credit reservation", async () => {
+    const response = await POST(
+      buildRequest({ prompt: "hello", characterImages: ["not-a-url"] }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: expect.stringContaining("characterImages"),
+    });
+    expect(acquireGenerationIdempotencyMock).not.toHaveBeenCalled();
+    expect(reserveGenerationCreditMock).not.toHaveBeenCalled();
+  });
+
   it("replays cached result and skips credit reservation", async () => {
     acquireGenerationIdempotencyMock.mockResolvedValueOnce({
       kind: "replay",

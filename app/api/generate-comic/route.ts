@@ -27,6 +27,10 @@ import {
   releaseGenerationIdempotency,
   type IdempotencyToken,
 } from "@/lib/generation-idempotency";
+import {
+  generateComicRequestSchema,
+  getRequestValidationErrorMessage,
+} from "@/lib/api-request-validation";
 
 type ErrorInspection = {
   codes: Set<string>;
@@ -118,15 +122,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let requestBody: unknown;
+    try {
+      requestBody = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON body" },
+        { status: 400 },
+      );
+    }
+
+    const parsedRequest = generateComicRequestSchema.safeParse(requestBody);
+    if (!parsedRequest.success) {
+      return NextResponse.json(
+        {
+          error: getRequestValidationErrorMessage(parsedRequest.error),
+        },
+        { status: 400 },
+      );
+    }
+
     const {
       storyId,
       prompt,
-      style = "noir",
+      style,
       panelLayout,
-      characterImages = [],
-      isContinuation = false,
-      previousContext = "",
-    } = await request.json();
+      characterImages,
+      isContinuation,
+      previousContext,
+    } = parsedRequest.data;
 
     const idempotencyResult = await acquireGenerationIdempotency({
       scope: storyId ? `generate-comic:${storyId}` : "generate-comic:new-story",
@@ -151,13 +175,6 @@ export async function POST(request: NextRequest) {
     }
 
     idempotencyToken = idempotencyResult.token;
-
-    if (!prompt) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 },
-      );
-    }
 
     const usesOwnApiKey = false;
 

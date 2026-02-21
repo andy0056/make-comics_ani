@@ -2,6 +2,10 @@ import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { deleteStory, updateStory } from "@/lib/db-actions";
 import { getOwnedStoryWithPagesBySlug } from "@/lib/story-access";
+import {
+  getRequestValidationErrorMessage,
+  storyTitleUpdateRequestSchema,
+} from "@/lib/api-request-validation";
 
 export async function GET(
   _request: NextRequest,
@@ -92,16 +96,25 @@ export async function PUT(
       );
     }
 
-    const { title } = await request.json();
-
-    if (!title || typeof title !== "string" || title.trim().length === 0) {
+    let requestBody: unknown;
+    try {
+      requestBody = await request.json();
+    } catch {
       return NextResponse.json(
-        { error: "Title is required and must be a non-empty string" },
+        { error: "Invalid JSON body" },
         { status: 400 },
       );
     }
 
-    await updateStory(accessResult.story.id, { title: title.trim() });
+    const parsedRequest = storyTitleUpdateRequestSchema.safeParse(requestBody);
+    if (!parsedRequest.success) {
+      return NextResponse.json(
+        { error: getRequestValidationErrorMessage(parsedRequest.error) },
+        { status: 400 },
+      );
+    }
+
+    await updateStory(accessResult.story.id, { title: parsedRequest.data.title });
 
     return NextResponse.json({ success: true });
   } catch (error) {

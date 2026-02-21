@@ -3,8 +3,10 @@ import { auth } from "@clerk/nextjs/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { stories } from "@/lib/schema";
-
-type ShareAction = "enable" | "disable" | "rotate";
+import {
+  getRequestValidationErrorMessage,
+  shareSettingsRequestSchema,
+} from "@/lib/api-request-validation";
 
 function getBaseOrigin(request: NextRequest): string {
   const configuredBaseUrl = process.env.NEXT_PUBLIC_BASE_URL?.trim();
@@ -31,19 +33,6 @@ async function getOwnedStory(storySlug: string, userId: string) {
     .limit(1);
 
   return rows[0] ?? null;
-}
-
-function parseShareAction(body: unknown): ShareAction | null {
-  if (!body || typeof body !== "object") {
-    return null;
-  }
-
-  const action = (body as { action?: unknown }).action;
-  if (action === "enable" || action === "disable" || action === "rotate") {
-    return action;
-  }
-
-  return null;
 }
 
 export async function GET(
@@ -112,10 +101,14 @@ export async function POST(
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const action = parseShareAction(body);
-    if (!action) {
-      return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    const parsedRequest = shareSettingsRequestSchema.safeParse(body);
+    if (!parsedRequest.success) {
+      return NextResponse.json(
+        { error: getRequestValidationErrorMessage(parsedRequest.error) },
+        { status: 400 },
+      );
     }
+    const { action } = parsedRequest.data;
 
     let isPublicShare = story.isPublicShare;
     let shareToken = story.shareToken;

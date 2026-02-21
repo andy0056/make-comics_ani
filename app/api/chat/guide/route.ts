@@ -5,6 +5,10 @@ import { Redis } from "@upstash/redis";
 import { auth } from "@clerk/nextjs/server";
 
 import { getStoryWithPagesBySlug } from "@/lib/db-actions";
+import {
+    chatGuideRequestSchema,
+    getRequestValidationErrorMessage,
+} from "@/lib/api-request-validation";
 
 // Define the API route response format
 
@@ -197,11 +201,23 @@ export async function POST(req: Request) {
             }
         }
 
-        const { messages, context, storySlug } = await req.json();
-
-        if (!messages || !Array.isArray(messages)) {
-            return NextResponse.json({ error: "Invalid messages format" }, { status: 400 });
+        let requestBody: unknown;
+        try {
+            requestBody = await req.json();
+        } catch {
+            return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
         }
+
+        const parsedRequest = chatGuideRequestSchema.safeParse(requestBody);
+        if (!parsedRequest.success) {
+            return NextResponse.json(
+                {
+                    error: getRequestValidationErrorMessage(parsedRequest.error),
+                },
+                { status: 400 },
+            );
+        }
+        const { messages, context, storySlug } = parsedRequest.data;
 
         let databaseContext = "";
         let compactDatabaseContext = "";
@@ -230,8 +246,8 @@ export async function POST(req: Request) {
         }
 
         const together = new Together({ apiKey: process.env.TOGETHER_API_KEY });
-        const chatMessages = messages.map((m: any) => ({
-            role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+        const chatMessages = messages.map((m) => ({
+            role: m.role,
             content: m.content,
         }));
         const baseSystemPrompt = buildSystemPromptWithContext({

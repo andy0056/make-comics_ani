@@ -1,6 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { getStoryWithPagesBySlug, deletePage } from "@/lib/db-actions";
+import {
+  deletePageRequestSchema,
+  getRequestValidationErrorMessage,
+} from "@/lib/api-request-validation";
 
 export async function DELETE(request: NextRequest) {
   try {
@@ -13,14 +17,25 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const { storySlug, pageId } = await request.json();
-
-    if (!storySlug || !pageId) {
+    let requestBody: unknown;
+    try {
+      requestBody = await request.json();
+    } catch {
       return NextResponse.json(
-        { error: "Missing required fields: storySlug and pageId" },
+        { error: "Invalid JSON body" },
         { status: 400 }
       );
     }
+
+    const parsedRequest = deletePageRequestSchema.safeParse(requestBody);
+    if (!parsedRequest.success) {
+      return NextResponse.json(
+        { error: getRequestValidationErrorMessage(parsedRequest.error) },
+        { status: 400 }
+      );
+    }
+
+    const { storySlug, pageId } = parsedRequest.data;
 
     // Get the story to check ownership
     const storyData = await getStoryWithPagesBySlug(storySlug);
@@ -56,9 +71,7 @@ export async function DELETE(request: NextRequest) {
     console.error("Error deleting page:", error);
     return NextResponse.json(
       {
-        error: `Internal server error: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
+        error: "Internal server error.",
       },
       { status: 500 }
     );
