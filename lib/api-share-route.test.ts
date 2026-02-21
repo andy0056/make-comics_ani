@@ -81,8 +81,24 @@ describe("api/share/[storySlug]", () => {
     expect(selectMock).not.toHaveBeenCalled();
   });
 
+  it("returns 404 when token format is invalid", async () => {
+    const req = new NextRequest(
+      "http://localhost/api/share/story-slug?token=invalid-token",
+    );
+
+    const res = await GET(req, {
+      params: Promise.resolve({ storySlug: "story-slug" }),
+    });
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Story not found" });
+    expect(selectMock).not.toHaveBeenCalled();
+  });
+
   it("returns 404 when story is not publicly shared or token mismatches", async () => {
-    const req = new NextRequest("http://localhost/api/share/story-slug?token=bad");
+    const req = new NextRequest(
+      "http://localhost/api/share/story-slug?token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    );
 
     selectMock.mockImplementationOnce(() =>
       makeStorySelectResult([
@@ -93,7 +109,7 @@ describe("api/share/[storySlug]", () => {
           description: null,
           style: "noir",
           isPublicShare: true,
-          shareToken: "good-token",
+          shareToken: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           createdAt: new Date("2026-01-01T00:00:00.000Z"),
         },
       ]),
@@ -109,7 +125,7 @@ describe("api/share/[storySlug]", () => {
 
   it("returns story + pages for valid token", async () => {
     const req = new NextRequest(
-      "http://localhost/api/share/story-slug?token=good-token",
+      "http://localhost/api/share/story-slug?token=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     );
 
     selectMock
@@ -122,7 +138,7 @@ describe("api/share/[storySlug]", () => {
             description: "desc",
             style: "noir",
             isPublicShare: true,
-            shareToken: "good-token",
+            shareToken: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             createdAt: new Date("2026-01-01T00:00:00.000Z"),
           },
         ]),

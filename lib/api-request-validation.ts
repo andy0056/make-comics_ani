@@ -109,6 +109,12 @@ export const shareSettingsRequestSchema = z.object({
   action: z.enum(["enable", "disable", "rotate"]),
 });
 
+const SHARE_TOKEN_PATTERN = /^[a-f0-9]{32}$/i;
+
+export const shareTokenQuerySchema = z.object({
+  token: z.string().trim().regex(SHARE_TOKEN_PATTERN, "Invalid share token"),
+});
+
 function isHttpUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
