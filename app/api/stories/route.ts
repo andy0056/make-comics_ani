@@ -245,26 +245,13 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Error fetching user stories:", error);
-    const inspection = inspectError(error);
     const isDatabaseUnavailable = isDatabaseUnavailableError(error);
-    const detail =
-      process.env.NODE_ENV === "development"
-        ? error instanceof Error
-          ? {
-              message: error.message,
-              stack: error.stack,
-              codes: Array.from(inspection.codes),
-              causes: inspection.messages,
-            }
-          : { message: String(error) }
-        : undefined;
 
     return NextResponse.json(
       {
         error: isDatabaseUnavailable
           ? "Database unavailable. Ensure Postgres is running and DATABASE_URL is reachable."
           : "Failed to fetch stories",
-        ...(detail ? { detail } : {}),
       },
       { status: isDatabaseUnavailable ? 503 : 500 }
     );
