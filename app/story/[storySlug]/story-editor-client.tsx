@@ -11,6 +11,9 @@ import { ComicCanvas } from "@/components/editor/comic-canvas";
 import { ApiKeyModal } from "@/components/api-key-modal";
 import { PageInfoSheet } from "@/components/editor/page-info-sheet";
 import { GeneratePageModal } from "@/components/editor/generate-page-modal";
+import { CharacterBibleSheet } from "@/components/editor/character-bible-sheet";
+import { UniverseSheet } from "@/components/editor/universe-sheet";
+import { PublishSheet } from "@/components/editor/publish-sheet";
 import { StoryLoader } from "@/components/ui/story-loader";
 import {
   AlertDialog,
@@ -55,6 +58,9 @@ export function StoryEditorClient() {
   const [showApiModal, setShowApiModal] = useState(false);
   const [showInfoSheet, setShowInfoSheet] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [showCharacterBible, setShowCharacterBible] = useState(false);
+  const [showUniverseSheet, setShowUniverseSheet] = useState(false);
+  const [showPublishSheet, setShowPublishSheet] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [pageToDelete, setPageToDelete] = useState<number | null>(null);
   const [showRedrawDialog, setShowRedrawDialog] = useState(false);
@@ -510,6 +516,9 @@ export function StoryEditorClient() {
         isGeneratingPDF={isGeneratingPDF}
         isOwner={isOwner}
         onTitleUpdate={handleTitleUpdate}
+        onOpenCharacterBible={() => setShowCharacterBible(true)}
+        onOpenUniverse={() => setShowUniverseSheet(true)}
+        onOpenPublish={() => setShowPublishSheet(true)}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -617,6 +626,29 @@ export function StoryEditorClient() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Advanced Creator Sheets */}
+      <CharacterBibleSheet
+        isOpen={showCharacterBible}
+        onClose={() => setShowCharacterBible(false)}
+        storySlug={slug}
+        initialCharacters={[]}
+        availableCharacterImages={existingCharacterImages}
+        onCharactersUpdated={() => { }}
+      />
+      <UniverseSheet
+        isOpen={showUniverseSheet}
+        onClose={() => setShowUniverseSheet(false)}
+        storySlug={slug}
+        canManageCollaborators={isOwner}
+      />
+      <PublishSheet
+        isOpen={showPublishSheet}
+        onClose={() => setShowPublishSheet(false)}
+        storySlug={slug}
+        onDownloadPDF={downloadPDF}
+        isGeneratingPDF={isGeneratingPDF}
+      />
     </div>
   );
 }

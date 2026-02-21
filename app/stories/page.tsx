@@ -3,10 +3,21 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, BookOpen, Search, SlidersHorizontal } from "lucide-react";
+import { Plus, Loader2, BookOpen, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Navbar } from "@/components/landing/navbar";
 import { StoryLoader } from "@/components/ui/story-loader";
 import { COMIC_STYLES } from "@/lib/constants";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Story {
   id: string;
@@ -30,6 +41,8 @@ export default function StoriesPage() {
   const [styleFilter, setStyleFilter] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [showFilters, setShowFilters] = useState(false);
+  const [deletingStorySlug, setDeletingStorySlug] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const fetchStories = async () => {
     try {
@@ -55,6 +68,31 @@ export default function StoriesPage() {
   useEffect(() => {
     fetchStories();
   }, []);
+
+  const handleDeleteStory = async (slug: string) => {
+    try {
+      const res = await fetch(`/api/stories/${slug}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to delete story");
+      }
+      setStories((prev) => prev.filter((s) => s.slug !== slug));
+      toast({
+        title: "Story deleted",
+        description: "The story has been permanently removed.",
+      });
+    } catch (error) {
+      console.error("Error deleting story:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete story. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingStorySlug(null);
+    }
+  };
 
   // Filtered and sorted stories
   const filteredStories = stories
@@ -121,8 +159,8 @@ export default function StoriesPage() {
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex h-10 items-center gap-2 rounded-lg border px-3 text-sm transition-colors ${showFilters || styleFilter
-                    ? "border-indigo/60 bg-indigo/10 text-white"
-                    : "border-border/50 text-muted-foreground hover:border-indigo/40 hover:text-white"
+                  ? "border-indigo/60 bg-indigo/10 text-white"
+                  : "border-border/50 text-muted-foreground hover:border-indigo/40 hover:text-white"
                   }`}
               >
                 <SlidersHorizontal className="h-4 w-4" />
@@ -136,8 +174,8 @@ export default function StoriesPage() {
                 <button
                   onClick={() => setStyleFilter(null)}
                   className={`rounded-full px-3 py-1 text-xs transition-colors ${!styleFilter
-                      ? "bg-white text-black"
-                      : "border border-border/60 text-muted-foreground hover:text-white"
+                    ? "bg-white text-black"
+                    : "border border-border/60 text-muted-foreground hover:text-white"
                     }`}
                 >
                   All
@@ -149,8 +187,8 @@ export default function StoriesPage() {
                       key={styleId}
                       onClick={() => setStyleFilter(styleFilter === styleId ? null : styleId)}
                       className={`rounded-full px-3 py-1 text-xs transition-colors ${styleFilter === styleId
-                          ? "bg-white text-black"
-                          : "border border-border/60 text-muted-foreground hover:text-white"
+                        ? "bg-white text-black"
+                        : "border border-border/60 text-muted-foreground hover:text-white"
                         }`}
                     >
                       {styleMeta?.name || styleId}
@@ -264,6 +302,19 @@ export default function StoriesPage() {
                         </span>
                       )}
                     </div>
+
+                    {/* Delete button (shows on hover) */}
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDeletingStorySlug(story.slug);
+                      }}
+                      className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-md transition-all hover:bg-red-500/80 group-hover:opacity-100"
+                      aria-label="Delete story"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
 
                   {/* Info */}
@@ -282,6 +333,26 @@ export default function StoriesPage() {
           </div>
         )}
       </main>
+
+      <AlertDialog open={!!deletingStorySlug} onOpenChange={(open) => !open && setDeletingStorySlug(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Story</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this story? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingStorySlug && handleDeleteStory(deletingStorySlug)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -123,3 +123,50 @@ export async function PUT(
     );
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ storySlug: string }> }
+) {
+  try {
+    const { userId } = await auth();
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    const { storySlug: slug } = await params;
+
+    if (!slug) {
+      return NextResponse.json(
+        { error: "Story slug is required" },
+        { status: 400 }
+      );
+    }
+
+    const result = await getStoryWithPagesBySlug(slug);
+
+    if (!result) {
+      return NextResponse.json({ error: "Story not found" }, { status: 404 });
+    }
+
+    // Check if the story belongs to the authenticated user
+    if (result.story.userId !== userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    const { deleteStory } = await import("@/lib/db-actions");
+    await deleteStory(result.story.id);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting story:", error);
+    return NextResponse.json(
+      { error: "Failed to delete story" },
+      { status: 500 }
+    );
+  }
+}

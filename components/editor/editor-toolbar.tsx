@@ -5,6 +5,9 @@ import {
   Share,
   Plus,
   Download,
+  Users,
+  Globe,
+  Rocket
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
@@ -18,6 +21,9 @@ interface EditorToolbarProps {
   isGeneratingPDF?: boolean;
   isOwner?: boolean;
   onTitleUpdate?: (newTitle: string) => void;
+  onOpenCharacterBible?: () => void;
+  onOpenUniverse?: () => void;
+  onOpenPublish?: () => void;
 }
 
 export function EditorToolbar({
@@ -27,6 +33,9 @@ export function EditorToolbar({
   isGeneratingPDF = false,
   isOwner = true,
   onTitleUpdate,
+  onOpenCharacterBible,
+  onOpenUniverse,
+  onOpenPublish,
 }: EditorToolbarProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -127,11 +136,10 @@ export function EditorToolbar({
           />
         ) : (
           <h1
-            className={`text-base sm:text-xl text-white font-heading font-semibold  truncate ${
-              isOwner && onTitleUpdate
+            className={`text-base sm:text-xl text-white font-heading font-semibold  truncate ${isOwner && onTitleUpdate
                 ? "cursor-pointer hover:text-gray-300"
                 : ""
-            }`}
+              }`}
             onClick={handleTitleClick}
           >
             {title}
@@ -140,6 +148,33 @@ export function EditorToolbar({
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        {/* Advanced Creator Tools */}
+        {isOwner && onOpenCharacterBible && (
+          <Button
+            variant="ghost"
+            onClick={onOpenCharacterBible}
+            className="hover:bg-indigo/20 hover:text-indigo-400 text-muted-foreground gap-1.5 sm:gap-2 text-xs h-8 sm:h-9 px-2 sm:px-3 hidden md:flex transition-colors"
+            title="Character Bible"
+          >
+            <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden lg:inline">Characters</span>
+          </Button>
+        )}
+
+        {isOwner && onOpenUniverse && (
+          <Button
+            variant="ghost"
+            onClick={onOpenUniverse}
+            className="hover:bg-purple-500/20 hover:text-purple-400 text-muted-foreground gap-1.5 sm:gap-2 text-xs h-8 sm:h-9 px-2 sm:px-3 hidden md:flex transition-colors"
+            title="Universe Settings"
+          >
+            <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden lg:inline">Universe</span>
+          </Button>
+        )}
+
+        <div className="w-px h-6 bg-border/50 mx-1 hidden md:block" />
+
         <Button
           variant="ghost"
           className="hover:bg-secondary text-muted-foreground hover:text-white gap-1.5 sm:gap-2 text-xs h-8 sm:h-9 px-2 sm:px-3 hidden md:flex"
@@ -175,7 +210,18 @@ export function EditorToolbar({
             disabled={isGeneratingPDF}
           >
             <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span>{isGeneratingPDF ? "Generating..." : "Download PDF"}</span>
+            <span className="hidden sm:inline">{isGeneratingPDF ? "Generating..." : "PDF"}</span>
+          </Button>
+        )}
+
+        {isOwner && onOpenPublish && (
+          <Button
+            variant="ghost"
+            onClick={onOpenPublish}
+            className="hover:bg-emerald-500/20 hover:text-emerald-400 text-muted-foreground gap-1.5 sm:gap-2 text-xs h-8 sm:h-9 px-2 sm:px-3"
+          >
+            <Rocket className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Publish</span>
           </Button>
         )}
 
