@@ -91,7 +91,7 @@ Use the above story data to give highly specific, tailored advice. Refer to char
                     content: m.content
                 }))
             ],
-            model: "meta-llama/Llama-3.3-70B-Instruct-Turbo", // Fast, highly capable model
+            model: "moonshotai/Kimi-K2.5", // Fast, highly capable alternative model
             temperature: 0.7,
             max_tokens: 500,
         });
