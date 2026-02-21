@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { usePathname, useParams } from "next/navigation";
-import { MessageCircle, X, Send, Bot, Sparkles, Zap, HelpCircle } from "lucide-react";
+import { MessageCircle, X, Send, Bot, Sparkles, Zap, HelpCircle, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +43,7 @@ export function AIGuideWidget() {
     ]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -158,13 +159,26 @@ export function AIGuideWidget() {
                             >
                                 <div
                                     className={cn(
-                                        "max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap",
+                                        "relative group max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap select-text selection:bg-indigo-500/30",
                                         msg.role === "user"
                                             ? "bg-indigo text-white rounded-br-none"
-                                            : "bg-muted/50 text-muted-foreground border border-border/50 rounded-bl-none"
+                                            : "bg-muted/50 text-muted-foreground border border-border/50 rounded-bl-none pr-8"
                                     )}
                                 >
                                     {renderMarkdown(msg.content)}
+                                    {msg.role === "assistant" && (
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(msg.content);
+                                                setCopiedIndex(idx);
+                                                setTimeout(() => setCopiedIndex(null), 2000);
+                                            }}
+                                            className="absolute top-2 right-2 p-1 rounded-md bg-background/50 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background hover:text-white"
+                                            title="Copy to clipboard"
+                                        >
+                                            {copiedIndex === idx ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         ))}
