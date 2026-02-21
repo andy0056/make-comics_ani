@@ -152,11 +152,21 @@ export async function POST(request: NextRequest) {
       isContinuation,
       previousContext,
     } = parsedRequest.data;
+    const idempotencyKey = getIdempotencyKeyFromHeaders(request.headers);
+    if (!idempotencyKey) {
+      return NextResponse.json(
+        {
+          error:
+            "A valid x-idempotency-key header is required for generation requests.",
+        },
+        { status: 400 },
+      );
+    }
 
     const idempotencyResult = await acquireGenerationIdempotency({
       scope: storyId ? `generate-comic:${storyId}` : "generate-comic:new-story",
       userId,
-      idempotencyKey: getIdempotencyKeyFromHeaders(request.headers),
+      idempotencyKey,
     });
 
     if (idempotencyResult.kind === "replay") {

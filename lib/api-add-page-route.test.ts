@@ -162,6 +162,22 @@ describe("api/add-page route", () => {
     expect(reserveGenerationCreditMock).not.toHaveBeenCalled();
   });
 
+  it("requires a valid idempotency key header", async () => {
+    getIdempotencyKeyFromHeadersMock.mockReturnValueOnce(null);
+
+    const response = await POST(
+      buildRequest({ storyId: "story-slug", prompt: "continue" }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error:
+        "A valid x-idempotency-key header is required for generation requests.",
+    });
+    expect(acquireGenerationIdempotencyMock).not.toHaveBeenCalled();
+    expect(reserveGenerationCreditMock).not.toHaveBeenCalled();
+  });
+
   it("replays cached result and skips credit reservation", async () => {
     acquireGenerationIdempotencyMock.mockResolvedValueOnce({
       kind: "replay",
