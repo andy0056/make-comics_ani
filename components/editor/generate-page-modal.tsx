@@ -283,8 +283,16 @@ export function GeneratePageModal({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-        <DialogContent className="border border-border/50 rounded-lg bg-background max-w-3xl w-[95vw] max-h-[90vh] overflow-y-auto">
+      <Dialog open={isOpen} onOpenChange={handleOpenChange} modal={false}>
+        <DialogContent
+          onInteractOutside={(e) => {
+            const target = e.target as Element;
+            if (target.closest && target.closest('#kaboom-bot-widget')) {
+              e.preventDefault();
+            }
+          }}
+          className="border border-border/50 rounded-lg bg-background max-w-3xl w-[95vw] max-h-[90vh] overflow-y-auto"
+        >
           <DialogHeader>
             <DialogTitle className="text-xl text-white font-heading">
               {isRedrawMode
@@ -489,8 +497,8 @@ export function GeneratePageModal({
                     onClick={() => setPanelLayout(layout.id)}
                     disabled={isGenerating}
                     className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-all disabled:opacity-50 ${panelLayout === layout.id
-                        ? "border-indigo/50 bg-indigo/10 text-white"
-                        : "border-border/40 text-muted-foreground/70 hover:border-border/60 hover:text-white"
+                      ? "border-indigo/50 bg-indigo/10 text-white"
+                      : "border-border/40 text-muted-foreground/70 hover:border-border/60 hover:text-white"
                       }`}
                   >
                     <PanelLayoutDiagram layoutId={layout.id} size={14} />
