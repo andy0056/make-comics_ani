@@ -6,7 +6,6 @@ const MAX_CONTEXT_CHARS = 2000;
 const MAX_MESSAGE_CHARS = 3000;
 const MAX_TOTAL_MESSAGE_CHARS = 12000;
 const MAX_SLUG_CHARS = 160;
-const MAX_ID_CHARS = 160;
 const MAX_URL_CHARS = 2048;
 const MAX_TITLE_CHARS = 140;
 const MAX_CHARACTER_NAME_CHARS = 60;
@@ -22,8 +21,9 @@ const panelLayoutIds = new Set(PANEL_LAYOUTS.map((layout) => layout.id));
 const safeString = z.string().trim().min(1);
 
 const storySlugSchema = safeString.max(MAX_SLUG_CHARS);
-const storyIdSchema = safeString.max(MAX_ID_CHARS);
-const pageIdSchema = safeString.max(MAX_ID_CHARS);
+const uuidSchema = z.string().trim().uuid("Invalid UUID");
+const storyIdSchema = uuidSchema;
+const pageIdSchema = uuidSchema;
 const characterImageSchema = z.string().trim().url().max(MAX_URL_CHARS);
 const longTextSchema = z.string().trim().max(MAX_CHARACTER_TEXT_CHARS);
 
