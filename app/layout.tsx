@@ -8,7 +8,6 @@ import {
 } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "@/components/ui/toaster"
-import PlausibleProvider from "next-plausible"
 import { ClerkProvider } from "@clerk/nextjs"
 import { GlobalErrorBoundary } from "@/components/ui/error-boundary"
 import { FeedbackWidget } from "@/components/ui/feedback-widget"
@@ -63,4 +62,3 @@ export default function RootLayout({
     </ClerkProvider>
   )
 }
-

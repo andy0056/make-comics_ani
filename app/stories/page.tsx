@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, BookOpen, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Plus, BookOpen, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Navbar } from "@/components/landing/navbar";
 import { StoryLoader } from "@/components/ui/story-loader";
 import { COMIC_STYLES } from "@/lib/constants";
