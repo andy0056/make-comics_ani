@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useState, useRef, useEffect } from "react";
 
 interface EditorToolbarProps {
+  storySlug?: string;
   title: string;
   onContinueStory?: () => void;
   onDownloadPDF?: () => void;
@@ -30,6 +31,7 @@ interface EditorToolbarProps {
 }
 
 export function EditorToolbar({
+  storySlug,
   title,
   onContinueStory,
   onDownloadPDF,
@@ -46,6 +48,7 @@ export function EditorToolbar({
   const { toast } = useToast();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState(title);
+  const [isSharingLink, setIsSharingLink] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     setEditingTitle(title);
@@ -116,6 +119,82 @@ export function EditorToolbar({
     }
   };
 
+  const handleShareStory = async () => {
+    const slug = storySlug || window.location.pathname.split("/").pop();
+    if (!slug) {
+      toast({
+        title: "Failed to copy",
+        description: "Could not determine the story URL.",
+        variant: "destructive",
+        duration: 3000,
+      });
+      return;
+    }
+
+    if (!isOwner) {
+      const url = window.location.href;
+      try {
+        await navigator.clipboard.writeText(url);
+        toast({
+          title: "Link copied!",
+          description: "Story URL has been copied to your clipboard.",
+          duration: 2000,
+        });
+      } catch (error) {
+        console.error("Failed to copy URL:", error);
+        toast({
+          title: "Failed to copy",
+          description: "Could not copy the URL to clipboard.",
+          variant: "destructive",
+          duration: 3000,
+        });
+      }
+      return;
+    }
+
+    setIsSharingLink(true);
+
+    try {
+      const response = await fetch(`/api/stories/${slug}/share`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "enable" }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to create share link");
+      }
+
+      const shareUrl = data?.share?.shareUrl;
+      if (!shareUrl) {
+        throw new Error("Share link is unavailable");
+      }
+
+      await navigator.clipboard.writeText(shareUrl);
+      toast({
+        title: "Share link copied!",
+        description: "Public share link is live and copied to your clipboard.",
+        duration: 2500,
+      });
+    } catch (error) {
+      console.error("Failed to create share URL:", error);
+      toast({
+        title: "Failed to share",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Could not create a public share link.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    } finally {
+      setIsSharingLink(false);
+    }
+  };
+
   return (
     <header className="h-14 border-b border-border/50 bg-background/80 backdrop-blur-md flex items-center justify-between px-3 sm:px-4">
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
@@ -183,28 +262,11 @@ export function EditorToolbar({
         <Button
           variant="ghost"
           className="hover:bg-secondary text-muted-foreground hover:text-white gap-1.5 sm:gap-2 text-xs h-8 sm:h-9 px-2 sm:px-3 hidden md:flex"
-          onClick={async () => {
-            const url = window.location.href;
-            try {
-              await navigator.clipboard.writeText(url);
-              toast({
-                title: "Link copied!",
-                description: "Story URL has been copied to your clipboard.",
-                duration: 2000,
-              });
-            } catch (err) {
-              console.error("Failed to copy URL:", err);
-              toast({
-                title: "Failed to copy",
-                description: "Could not copy the URL to clipboard.",
-                variant: "destructive",
-                duration: 3000,
-              });
-            }
-          }}
+          onClick={handleShareStory}
+          disabled={isSharingLink}
         >
           <Share className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          <span>Share</span>
+          <span>{isSharingLink ? "Sharing..." : "Share"}</span>
         </Button>
 
         {onDownloadPDF && (

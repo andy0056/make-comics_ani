@@ -3,14 +3,35 @@ import { SharePageClient } from "./share-page-client";
 
 interface SharePageProps {
     params: Promise<{ storySlug: string }>;
+    searchParams: Promise<{ token?: string | string[] }>;
 }
 
-export async function generateMetadata({ params }: SharePageProps): Promise<Metadata> {
-    const { storySlug } = await params;
+function getTokenParam(token: string | string[] | undefined): string {
+    if (typeof token === "string") {
+        return token;
+    }
+
+    if (Array.isArray(token) && token.length > 0) {
+        return token[0] ?? "";
+    }
+
+    return "";
+}
+
+export async function generateMetadata({ params, searchParams }: SharePageProps): Promise<Metadata> {
+    const [{ storySlug }, { token: rawToken }] = await Promise.all([params, searchParams]);
+    const token = getTokenParam(rawToken);
+
+    if (!token) {
+        return { title: "Story Not Found | KaBoom" };
+    }
 
     try {
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-        const res = await fetch(`${baseUrl}/api/share/${storySlug}`, {
+        const apiUrl = new URL(`/api/share/${storySlug}`, baseUrl);
+        apiUrl.searchParams.set("token", token);
+
+        const res = await fetch(apiUrl.toString(), {
             cache: "no-store",
         });
 
@@ -43,7 +64,7 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
     }
 }
 
-export default async function SharePage({ params }: SharePageProps) {
-    const { storySlug } = await params;
-    return <SharePageClient storySlug={storySlug} />;
+export default async function SharePage({ params, searchParams }: SharePageProps) {
+    const [{ storySlug }, { token: rawToken }] = await Promise.all([params, searchParams]);
+    return <SharePageClient storySlug={storySlug} token={getTokenParam(rawToken)} />;
 }

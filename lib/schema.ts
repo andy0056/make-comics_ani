@@ -1,5 +1,5 @@
 import { pgTable, text, integer, timestamp, uuid, jsonb, boolean, uniqueIndex } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // ─── Core Tables ─────────────────────────────────────────
 
@@ -11,9 +11,16 @@ export const stories = pgTable('stories', {
   style: text('style').default('noir').notNull(),
   userId: text('user_id').notNull(),
   usesOwnApiKey: boolean('uses_own_api_key').default(false),
+  isPublicShare: boolean('is_public_share').default(false).notNull(),
+  shareToken: text('share_token'),
+  shareUpdatedAt: timestamp('share_updated_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  shareTokenUniqueIdx: uniqueIndex('stories_share_token_unique')
+    .on(table.shareToken)
+    .where(sql`${table.shareToken} is not null`),
+}));
 
 export const pages = pgTable('pages', {
   id: uuid('id').primaryKey().defaultRandom(),

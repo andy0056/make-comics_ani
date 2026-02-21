@@ -20,7 +20,7 @@ interface SharedPage {
     generatedImageUrl: string | null;
 }
 
-export function SharePageClient({ storySlug }: { storySlug: string }) {
+export function SharePageClient({ storySlug, token }: { storySlug: string; token: string }) {
     const [story, setStory] = useState<SharedStory | null>(null);
     const [pages, setPages] = useState<SharedPage[]>([]);
     const [loading, setLoading] = useState(true);
@@ -29,8 +29,15 @@ export function SharePageClient({ storySlug }: { storySlug: string }) {
 
     useEffect(() => {
         const fetchStory = async () => {
+            if (!token) {
+                setError("Invalid share link");
+                setLoading(false);
+                return;
+            }
+
             try {
-                const res = await fetch(`/api/share/${storySlug}`);
+                const query = new URLSearchParams({ token });
+                const res = await fetch(`/api/share/${storySlug}?${query.toString()}`);
                 if (!res.ok) {
                     if (res.status === 404) {
                         setError("Story not found");
@@ -49,7 +56,7 @@ export function SharePageClient({ storySlug }: { storySlug: string }) {
             }
         };
         fetchStory();
-    }, [storySlug]);
+    }, [storySlug, token]);
 
     const handleShare = async () => {
         const shareUrl = window.location.href;
