@@ -1,13 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { getStoryWithPagesBySlug, updateStory } from "@/lib/db-actions";
-import { db } from "@/lib/db";
-import { stories } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+import { deleteStory, updateStory } from "@/lib/db-actions";
+import { getOwnedStoryWithPagesBySlug } from "@/lib/story-access";
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ storySlug: string }> }
+  { params }: { params: Promise<{ storySlug: string }> },
 ) {
   try {
     const { userId } = await auth();
@@ -15,63 +13,51 @@ export async function GET(
     if (!userId) {
       return NextResponse.json(
         { error: "Authentication required" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
     const { storySlug: slug } = await params;
 
-    // Special case: if slug is "all", return user's stories for debugging
-    if (slug === "all") {
-      const userStories = await db
-        .select()
-        .from(stories)
-        .where(eq(stories.userId, userId));
-      return NextResponse.json({
-        message: "User stories",
-        stories: userStories.map((s) => ({
-          id: s.id,
-          slug: s.slug,
-          title: s.title,
-        })),
-      });
-    }
-
     if (!slug) {
       return NextResponse.json(
         { error: "Story slug is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const result = await getStoryWithPagesBySlug(slug);
+    const accessResult = await getOwnedStoryWithPagesBySlug({
+      storySlug: slug,
+      userId,
+      requiredPermission: "view",
+      unauthorizedMode: "not_found",
+    });
 
-    if (!result) {
-      return NextResponse.json({ error: "Story not found" }, { status: 404 });
+    if (!accessResult.ok) {
+      return NextResponse.json(
+        { error: accessResult.error },
+        { status: accessResult.status },
+      );
     }
 
-    if (result.story.userId !== userId) {
-      return NextResponse.json({ error: "Story not found" }, { status: 404 });
-    }
-
-    // Return the story data with ownership information
-    const responseData = {
-      ...result,
-      isOwner: true,
-    };
-    return NextResponse.json(responseData);
+    return NextResponse.json({
+      story: accessResult.story,
+      pages: accessResult.pages,
+      isOwner: accessResult.access.isOwner,
+      access: accessResult.access,
+    });
   } catch (error) {
     console.error("Error fetching story:", error);
     return NextResponse.json(
       { error: "Failed to fetch story" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ storySlug: string }> }
+  { params }: { params: Promise<{ storySlug: string }> },
 ) {
   try {
     const { userId } = await auth();
@@ -79,7 +65,7 @@ export async function PUT(
     if (!userId) {
       return NextResponse.json(
         { error: "Authentication required" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -88,19 +74,22 @@ export async function PUT(
     if (!slug) {
       return NextResponse.json(
         { error: "Story slug is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const result = await getStoryWithPagesBySlug(slug);
+    const accessResult = await getOwnedStoryWithPagesBySlug({
+      storySlug: slug,
+      userId,
+      requiredPermission: "manage",
+      unauthorizedMode: "unauthorized",
+    });
 
-    if (!result) {
-      return NextResponse.json({ error: "Story not found" }, { status: 404 });
-    }
-
-    // Check if the story belongs to the authenticated user
-    if (result.story.userId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (!accessResult.ok) {
+      return NextResponse.json(
+        { error: accessResult.error },
+        { status: accessResult.status },
+      );
     }
 
     const { title } = await request.json();
@@ -108,25 +97,25 @@ export async function PUT(
     if (!title || typeof title !== "string" || title.trim().length === 0) {
       return NextResponse.json(
         { error: "Title is required and must be a non-empty string" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    await updateStory(result.story.id, { title: title.trim() });
+    await updateStory(accessResult.story.id, { title: title.trim() });
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error updating story:", error);
     return NextResponse.json(
       { error: "Failed to update story" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ storySlug: string }> }
+  _request: NextRequest,
+  { params }: { params: Promise<{ storySlug: string }> },
 ) {
   try {
     const { userId } = await auth();
@@ -134,7 +123,7 @@ export async function DELETE(
     if (!userId) {
       return NextResponse.json(
         { error: "Authentication required" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -143,30 +132,32 @@ export async function DELETE(
     if (!slug) {
       return NextResponse.json(
         { error: "Story slug is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const result = await getStoryWithPagesBySlug(slug);
+    const accessResult = await getOwnedStoryWithPagesBySlug({
+      storySlug: slug,
+      userId,
+      requiredPermission: "manage",
+      unauthorizedMode: "unauthorized",
+    });
 
-    if (!result) {
-      return NextResponse.json({ error: "Story not found" }, { status: 404 });
+    if (!accessResult.ok) {
+      return NextResponse.json(
+        { error: accessResult.error },
+        { status: accessResult.status },
+      );
     }
 
-    // Check if the story belongs to the authenticated user
-    if (result.story.userId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
-
-    const { deleteStory } = await import("@/lib/db-actions");
-    await deleteStory(result.story.id);
+    await deleteStory(accessResult.story.id);
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting story:", error);
     return NextResponse.json(
       { error: "Failed to delete story" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -1,87 +1,140 @@
-import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { stories, storyCharacters } from '@/lib/schema';
-import { eq } from 'drizzle-orm';
-import { auth } from '@clerk/nextjs/server';
+import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import { db } from "@/lib/db";
+import { storyCharacters } from "@/lib/schema";
+import { eq } from "drizzle-orm";
+import { getOwnedStoryWithPagesBySlug } from "@/lib/story-access";
+
+type CharacterPayload = {
+  name: string;
+  role?: string;
+  appearance?: string;
+  personality?: string;
+  speechStyle?: string;
+  referenceImageUrl?: string;
+  isLocked?: boolean;
+};
+
+function normalizeCharactersInput(value: unknown): CharacterPayload[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is CharacterPayload => typeof item === "object" && item !== null)
+    .map((item) => ({
+      name: typeof item.name === "string" ? item.name.trim() : "",
+      role: typeof item.role === "string" ? item.role : "",
+      appearance: typeof item.appearance === "string" ? item.appearance : "",
+      personality: typeof item.personality === "string" ? item.personality : "",
+      speechStyle: typeof item.speechStyle === "string" ? item.speechStyle : "",
+      referenceImageUrl:
+        typeof item.referenceImageUrl === "string" ? item.referenceImageUrl : "",
+      isLocked: typeof item.isLocked === "boolean" ? item.isLocked : true,
+    }))
+    .filter((item) => item.name.length > 0);
+}
 
 export async function GET(
-    request: Request,
-    { params }: { params: Promise<{ storySlug: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ storySlug: string }> },
 ) {
-    try {
-        const { userId } = await auth();
-        if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-        const slug = (await params).storySlug;
-        const story = await db.query.stories.findFirst({
-            where: eq(stories.slug, slug),
-        });
-
-        if (!story) return NextResponse.json({ error: "Story not found" }, { status: 404 });
-
-        const characters = await db.query.storyCharacters.findMany({
-            where: eq(storyCharacters.storyId, story.id),
-            orderBy: (chars, { asc }) => [asc(chars.sortOrder)],
-        });
-
-        return NextResponse.json({
-            characters: characters.map((c) => ({
-                name: c.name,
-                role: c.role || "",
-                appearance: c.appearance || "",
-                personality: c.personality || "",
-                speechStyle: c.speechStyle || "",
-                referenceImageUrl: c.referenceImageUrl || "",
-                isLocked: c.isLocked
-            }))
-        });
-    } catch (error) {
-        console.error("Characters GET error:", error);
-        return NextResponse.json({ error: "Failed to load characters" }, { status: 500 });
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const slug = (await params).storySlug;
+    const accessResult = await getOwnedStoryWithPagesBySlug({
+      storySlug: slug,
+      userId,
+      requiredPermission: "view",
+      unauthorizedMode: "not_found",
+    });
+
+    if (!accessResult.ok) {
+      return NextResponse.json(
+        { error: accessResult.error },
+        { status: accessResult.status },
+      );
+    }
+
+    const characters = await db
+      .select()
+      .from(storyCharacters)
+      .where(eq(storyCharacters.storyId, accessResult.story.id))
+      .orderBy(storyCharacters.sortOrder);
+
+    return NextResponse.json({
+      characters: characters.map((c) => ({
+        name: c.name,
+        role: c.role || "",
+        appearance: c.appearance || "",
+        personality: c.personality || "",
+        speechStyle: c.speechStyle || "",
+        referenceImageUrl: c.referenceImageUrl || "",
+        isLocked: c.isLocked,
+      })),
+      access: accessResult.access,
+    });
+  } catch (error) {
+    console.error("Characters GET error:", error);
+    return NextResponse.json({ error: "Failed to load characters" }, { status: 500 });
+  }
 }
 
 export async function PUT(
-    request: Request,
-    { params }: { params: Promise<{ storySlug: string }> }
+  request: Request,
+  { params }: { params: Promise<{ storySlug: string }> },
 ) {
-    try {
-        const { userId } = await auth();
-        if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-        const slug = (await params).storySlug;
-        const { characters } = await request.json();
-
-        const story = await db.query.stories.findFirst({
-            where: eq(stories.slug, slug),
-        });
-
-        if (!story || story.userId !== userId) {
-            return NextResponse.json({ error: "Not authorized to edit" }, { status: 403 });
-        }
-
-        // Replace all characters for this story
-        await db.delete(storyCharacters).where(eq(storyCharacters.storyId, story.id));
-
-        if (characters && characters.length > 0) {
-            await db.insert(storyCharacters).values(
-                characters.map((c: any, index: number) => ({
-                    storyId: story.id,
-                    name: c.name,
-                    role: c.role,
-                    appearance: c.appearance,
-                    personality: c.personality,
-                    speechStyle: c.speechStyle,
-                    referenceImageUrl: c.referenceImageUrl,
-                    isLocked: c.isLocked,
-                    sortOrder: index,
-                }))
-            );
-        }
-
-        return NextResponse.json({ characters });
-    } catch (error) {
-        console.error("Characters PUT error:", error);
-        return NextResponse.json({ error: "Failed to save characters" }, { status: 500 });
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const slug = (await params).storySlug;
+    const accessResult = await getOwnedStoryWithPagesBySlug({
+      storySlug: slug,
+      userId,
+      requiredPermission: "edit",
+      unauthorizedMode: "unauthorized",
+    });
+
+    if (!accessResult.ok) {
+      return NextResponse.json(
+        { error: accessResult.error },
+        { status: accessResult.status },
+      );
+    }
+
+    const body = await request.json();
+    const characters = normalizeCharactersInput(body?.characters);
+
+    await db
+      .delete(storyCharacters)
+      .where(eq(storyCharacters.storyId, accessResult.story.id));
+
+    if (characters.length > 0) {
+      await db.insert(storyCharacters).values(
+        characters.map((c, index) => ({
+          storyId: accessResult.story.id,
+          name: c.name,
+          role: c.role || "",
+          appearance: c.appearance || "",
+          personality: c.personality || "",
+          speechStyle: c.speechStyle || "",
+          referenceImageUrl: c.referenceImageUrl || "",
+          isLocked: c.isLocked ?? true,
+          sortOrder: index,
+        })),
+      );
+    }
+
+    return NextResponse.json({ characters });
+  } catch (error) {
+    console.error("Characters PUT error:", error);
+    return NextResponse.json({ error: "Failed to save characters" }, { status: 500 });
+  }
 }
