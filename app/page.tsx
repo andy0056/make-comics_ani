@@ -164,8 +164,8 @@ export default function Home() {
 
       </main>
 
-      <HowItWorks />
       <GalleryShowcase />
+      <HowItWorks />
 
       <Footer />
     </div>

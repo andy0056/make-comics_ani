@@ -30,18 +30,18 @@ export function LandingHero({ isAdvancedMode = false }: LandingHeroProps) {
         <div className="lg:text-left text-center">
           <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl text-foreground uppercase mb-4 sm:mb-5 tracking-wide font-heading font-semibold leading-tight sm:leading-[5.2rem]">
             Create stunning{" "}
-            <span className="text-indigo font-semibold relative">
+            <span className="text-indigo font-bold relative [text-shadow:4px_4px_0px_var(--color-comic-yellow)]">
               comics
               {/* Underline swoosh */}
               <svg
-                className="absolute -bottom-1 left-0 w-full h-3 text-indigo/40"
+                className="absolute -bottom-1 left-0 w-full h-3 text-indigo/60"
                 viewBox="0 0 200 12"
                 preserveAspectRatio="none"
               >
                 <path
                   d="M0 8 Q50 0, 100 6 T200 4"
                   stroke="currentColor"
-                  strokeWidth="2.5"
+                  strokeWidth="3.5"
                   fill="none"
                   strokeLinecap="round"
                 />

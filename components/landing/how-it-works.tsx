@@ -5,25 +5,28 @@ const STEPS = [
         emoji: "✍️",
         label: "Write",
         description: "Describe your scene",
-        accent: "from-indigo-500/20 to-purple-500/20",
-        border: "border-indigo-500/30",
-        glow: "shadow-indigo-500/10",
+        accent: "bg-background",
+        border: "border-border",
+        glow: "shadow-[4px_4px_0px_0px_var(--color-comic-yellow)]",
+        rotation: "-rotate-1",
     },
     {
         emoji: "🎨",
         label: "Style",
         description: "Pick a visual style",
-        accent: "from-pink-500/20 to-rose-500/20",
-        border: "border-pink-500/30",
-        glow: "shadow-pink-500/10",
+        accent: "bg-background",
+        border: "border-border",
+        glow: "shadow-[4px_4px_0px_0px_var(--color-comic-cyan)]",
+        rotation: "rotate-2",
     },
     {
         emoji: "💥",
         label: "Boom!",
         description: "AI renders your panels",
-        accent: "from-amber-500/20 to-orange-500/20",
-        border: "border-amber-500/30",
-        glow: "shadow-amber-500/10",
+        accent: "bg-background",
+        border: "border-border",
+        glow: "shadow-[4px_4px_0px_0px_var(--color-comic-yellow)]",
+        rotation: "-rotate-1",
     },
 ];
 
@@ -42,11 +45,11 @@ export function HowItWorks() {
                                 <div className="hidden sm:block absolute top-1/2 -right-3 sm:-right-3 w-6 h-px bg-gradient-to-r from-border/50 to-transparent z-10" />
                             )}
                             <div
-                                className={`relative rounded-xl border ${step.border} bg-gradient-to-br ${step.accent} p-6 text-center transition-all duration-300 hover:scale-[1.03] hover:shadow-lg ${step.glow}`}
+                                className={`relative rounded-xl border-2 ${step.border} ${step.accent} p-6 text-center transition-all duration-300 hover:scale-[1.03] ${step.glow} ${step.rotation}`}
                             >
                                 {/* Step number badge */}
-                                <div className="absolute -top-2.5 left-4 bg-background border border-border/50 rounded-full w-5 h-5 flex items-center justify-center">
-                                    <span className="text-[10px] font-bold text-muted-foreground">
+                                <div className="absolute -top-3 -left-3 bg-white border-2 border-black rounded-full w-8 h-8 flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] z-10">
+                                    <span className="text-sm font-bold text-black">
                                         {i + 1}
                                     </span>
                                 </div>

@@ -1143,8 +1143,8 @@ export function ComicCreationForm({
 
   return (
     <>
-      <div className="group relative rounded-xl p-0.5 transition-colors focus-within:border-indigo/30 glass-panel sm:p-1">
-        <div className="rounded-lg border border-border/50 bg-background/80 p-3 sm:p-4">
+      <div className="group relative rounded-xl p-0.5 transition-colors focus-within:border-indigo/30 bg-background sm:p-1 border-2 border-border shadow-[6px_6px_0px_0px_var(--color-comic-yellow)]">
+        <div className="rounded-lg bg-background p-3 sm:p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <label className="text-[10px] font-medium uppercase tracking-[0.02em] text-muted-foreground">
               {isGuidedSimpleMode
