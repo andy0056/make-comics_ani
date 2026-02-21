@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Loader2, Key } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserButton, SignedIn } from "@clerk/nextjs";
 
@@ -19,7 +19,6 @@ interface PageSidebarProps {
   onPageSelect: (index: number) => void;
   onAddPage: () => void;
   loadingPageId?: number | null;
-  onApiKeyClick?: () => void;
   isOwner?: boolean;
 }
 
@@ -29,7 +28,6 @@ export function PageSidebar({
   onPageSelect,
   onAddPage,
   loadingPageId,
-  onApiKeyClick,
   isOwner = true,
 }: PageSidebarProps) {
   return (
@@ -43,10 +41,9 @@ export function PageSidebar({
             disabled={loadingPageId === index}
             className={`
               w-16 h-16 rounded-lg transition-all relative overflow-hidden
-              ${
-                currentPage === index
-                  ? "ring-2 ring-indigo shadow-lg shadow-indigo/20"
-                  : "glass-panel glass-panel-hover hover:ring-1 hover:ring-white/20"
+              ${currentPage === index
+                ? "ring-2 ring-indigo shadow-lg shadow-indigo/20"
+                : "glass-panel glass-panel-hover hover:ring-1 hover:ring-white/20"
               }
               ${loadingPageId === index ? "opacity-50" : ""}
             `}
@@ -65,11 +62,10 @@ export function PageSidebar({
                 <div
                   className={`
                   absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-medium tracking-tight
-                  ${
-                    currentPage === index
+                  ${currentPage === index
                       ? "bg-indigo text-white"
                       : "bg-black/70 text-white"
-                  }
+                    }
                 `}
                 >
                   {index + 1}
@@ -90,16 +86,6 @@ export function PageSidebar({
       </div>
 
       <div className="flex flex-col items-center gap-3">
-        {/* API Key Button */}
-        <Button
-          onClick={onApiKeyClick}
-          variant="ghost"
-          size="icon"
-          className="w-10 h-10 glass-panel glass-panel-hover text-muted-foreground hover:text-white"
-          title="Manage API Key"
-        >
-          <Key className="w-4 h-4" />
-        </Button>
 
         <SignedIn>
           <div className="w-10 h-10 glass-panel glass-panel-hover rounded-md flex items-center justify-center text-muted-foreground hover:text-white transition-colors">

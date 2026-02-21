@@ -6,6 +6,9 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 })
 
+// Note: Because all generation uses the platform's API key, this ID-based limit 
+// relies on Clerk's "Bot Protection" and "Email Verification" features to prevent 
+// malicious actors from spinning up infinite bot accounts to bypass the limit.
 // Beta: 15 comics per week (bump back to 3 after beta)
 export const freeTierRateLimit = new Ratelimit({
   redis,

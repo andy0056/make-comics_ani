@@ -3,12 +3,10 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { useApiKey } from "@/hooks/use-api-key";
 import { useAuth } from "@clerk/nextjs";
 import { EditorToolbar } from "@/components/editor/editor-toolbar";
 import { PageSidebar } from "@/components/editor/page-sidebar";
 import { ComicCanvas } from "@/components/editor/comic-canvas";
-import { ApiKeyModal } from "@/components/api-key-modal";
 import { PageInfoSheet } from "@/components/editor/page-info-sheet";
 import { GeneratePageModal } from "@/components/editor/generate-page-modal";
 import { CharacterBibleSheet } from "@/components/editor/character-bible-sheet";
@@ -55,7 +53,6 @@ export function StoryEditorClient() {
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [pages, setPages] = useState<PageData[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
-  const [showApiModal, setShowApiModal] = useState(false);
   const [showInfoSheet, setShowInfoSheet] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [showCharacterBible, setShowCharacterBible] = useState(false);
@@ -72,7 +69,6 @@ export function StoryEditorClient() {
   >([]);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const { toast } = useToast();
-  const [apiKey, setApiKey] = useApiKey();
   const isAdvancedMode = false;
   const [lastPanelLayout, setLastPanelLayout] = useState("5-panel");
 
@@ -196,7 +192,7 @@ export function StoryEditorClient() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pages.length, apiKey]);
+  }, [pages.length]);
 
 
   const handleAddPage = async () => {
@@ -204,15 +200,14 @@ export function StoryEditorClient() {
       return;
     }
 
-    // Check credits
+    // Check credits universally
     try {
-      const hasApiKey = !!apiKey;
       const response = await fetch('/api/check-credits', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ hasApiKey }),
+        body: JSON.stringify({}),
       });
       const data = await response.json();
 
@@ -225,19 +220,14 @@ export function StoryEditorClient() {
         return;
       }
 
-      if (hasApiKey || data.creditsRemaining === "unlimited") {
-        // Has API key, unlimited
-        setShowGenerateModal(true);
-      } else if (data.creditsRemaining > 0) {
-        // Has credits
+      if (data.creditsRemaining > 0) {
         setShowGenerateModal(true);
       } else {
-        // No credits left, show API modal
-        setShowApiModal(true);
         toast({
-          title: "No credits remaining",
-          description: "You get 3 credits weekly. Add an API key for unlimited generation.",
+          title: "Out of credits",
+          description: "You have exhausted your weekly generations. Check back soon!",
           variant: "destructive",
+          duration: 4000,
         });
       }
     } catch (error) {
@@ -252,10 +242,6 @@ export function StoryEditorClient() {
 
   const handleRedrawPage = () => {
     if (!isLoaded || !isSignedIn) {
-      return;
-    }
-    if (!apiKey) {
-      setShowApiModal(true);
       return;
     }
     setShowRedrawDialog(true);
@@ -279,7 +265,6 @@ export function StoryEditorClient() {
           storyId: story?.slug,
           pageId: currentPageData.dbId, // Add pageId to override existing page
           prompt: currentPageData.prompt,
-          apiKey,
           characterImages: currentPageData.characterUploads || [],
         }),
       });
@@ -317,9 +302,6 @@ export function StoryEditorClient() {
     }
   };
 
-  const handleApiKeyClick = () => {
-    setShowApiModal(true);
-  };
 
   const downloadPDF = async () => {
     if (!story || pages.length === 0) return;
@@ -423,20 +405,12 @@ export function StoryEditorClient() {
     }
   };
 
-  const handleApiKeySubmit = (key: string) => {
-    setApiKey(key);
-    setShowApiModal(false);
-  };
 
   const handleGeneratePage = async (data: {
     prompt: string;
     characterUrls?: string[];
     panelLayout?: string;
   }): Promise<void> => {
-    if (!apiKey) {
-      setShowApiModal(true);
-      throw new Error("API key required");
-    }
 
     // Remember the panel layout choice for future pages
     if (data.panelLayout) {
@@ -453,7 +427,6 @@ export function StoryEditorClient() {
         storyId: story?.slug,
         prompt: data.prompt,
         panelLayout: data.panelLayout,
-        apiKey,
         characterImages: data.characterUrls || [],
       }),
     });
@@ -528,7 +501,6 @@ export function StoryEditorClient() {
           onPageSelect={setCurrentPage}
           onAddPage={handleAddPage}
           loadingPageId={loadingPageId}
-          onApiKeyClick={handleApiKeyClick}
           isOwner={isOwner}
         />
         <ComicCanvas
@@ -551,11 +523,6 @@ export function StoryEditorClient() {
         />
       </div>
 
-      <ApiKeyModal
-        isOpen={showApiModal}
-        onClose={() => setShowApiModal(false)}
-        onSubmit={handleApiKeySubmit}
-      />
       <GeneratePageModal
         isOpen={showGenerateModal}
         onClose={() => setShowGenerateModal(false)}

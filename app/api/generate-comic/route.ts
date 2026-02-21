@@ -48,7 +48,6 @@ export async function POST(request: NextRequest) {
     const {
       storyId,
       prompt,
-      apiKey,
       style = "noir",
       panelLayout,
       characterImages = [],
@@ -63,41 +62,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const providedApiKey =
-      typeof apiKey === "string" && apiKey.trim().length > 0
-        ? apiKey.trim()
-        : undefined;
+    const isUsingFreeTier = true; // All generations go through rate limits now
+    const usesOwnApiKey = false;
 
-    // Determine which API key to use
-    let finalApiKey = providedApiKey;
-    const isUsingFreeTier = !providedApiKey;
-    const usesOwnApiKey = !!providedApiKey;
+    const rateLimitResult = await freeTierRateLimit.limit(userId);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        {
+          error:
+            "Credits exhausted. You are limited to 15 generations per week during the beta.",
+          isRateLimited: true,
+          creditsRemaining: rateLimitResult.remaining,
+          resetTime: rateLimitResult.reset,
+        },
+        { status: 429 },
+      );
+    }
 
-    if (isUsingFreeTier) {
-      const rateLimitResult = await freeTierRateLimit.limit(userId);
-      if (!rateLimitResult.success) {
-        return NextResponse.json(
-          {
-            error:
-              "Free tier limit reached. You get 3 generations every 7 days. Add your own API key for unlimited usage.",
-            isRateLimited: true,
-            creditsRemaining: rateLimitResult.remaining,
-            resetTime: rateLimitResult.reset,
-          },
-          { status: 429 },
-        );
-      }
-
-      // Use default API key for free tier
-      finalApiKey = process.env.TOGETHER_API_KEY;
-      if (!finalApiKey) {
-        return NextResponse.json(
-          {
-            error: "Server configuration error - default API key not available",
-          },
-          { status: 500 },
-        );
-      }
+    // Use default platform API key
+    const finalApiKey = process.env.TOGETHER_API_KEY;
+    if (!finalApiKey) {
+      return NextResponse.json(
+        {
+          error: "Server configuration error - default API key not available",
+        },
+        { status: 500 },
+      );
     }
 
     let page;

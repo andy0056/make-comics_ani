@@ -44,7 +44,6 @@ export async function POST(request: NextRequest) {
       storyId,
       pageId,
       prompt,
-      apiKey,
       panelLayout,
       characterImages = [],
     } = await request.json();
@@ -56,38 +55,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const providedApiKey =
-      typeof apiKey === "string" && apiKey.trim().length > 0
-        ? apiKey.trim()
-        : undefined;
-    const headerApiKey = request.headers.get("x-api-key")?.trim() || undefined;
-    const byokApiKey = providedApiKey || headerApiKey;
-    const isUsingFreeTier = !byokApiKey;
+    const rateLimitResult = await freeTierRateLimit.limit(userId);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        {
+          error:
+            "Credits exhausted. You are limited to 15 generations per week during the beta.",
+          isRateLimited: true,
+          creditsRemaining: rateLimitResult.remaining,
+          resetTime: rateLimitResult.reset,
+        },
+        { status: 429 },
+      );
+    }
 
-    let finalApiKey = byokApiKey;
-    if (isUsingFreeTier) {
-      if (!process.env.TOGETHER_API_KEY) {
-        return NextResponse.json(
-          { error: "Server configuration error - default API key not available" },
-          { status: 500 },
-        );
-      }
-
-      const rateLimitResult = await freeTierRateLimit.limit(userId);
-      if (!rateLimitResult.success) {
-        return NextResponse.json(
-          {
-            error:
-              "Free tier limit reached. You get 3 generations every 7 days. Add your own API key for unlimited usage.",
-            isRateLimited: true,
-            creditsRemaining: rateLimitResult.remaining,
-            resetTime: rateLimitResult.reset,
-          },
-          { status: 429 },
-        );
-      }
-
-      finalApiKey = process.env.TOGETHER_API_KEY;
+    const finalApiKey = process.env.TOGETHER_API_KEY;
+    if (!finalApiKey) {
+      return NextResponse.json(
+        { error: "Server configuration error - default API key not available" },
+        { status: 500 },
+      );
     }
 
     // Get the story and all its pages

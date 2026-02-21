@@ -20,9 +20,7 @@ import { usePresignedUpload } from "next-s3-upload";
 import { useAuth, useClerk, SignInButton } from "@clerk/nextjs";
 import { COMIC_STYLES, PANEL_LAYOUTS, DEFAULT_PANEL_LAYOUT_ID } from "@/lib/constants";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
-import { useApiKey } from "@/hooks/use-api-key";
 import { isContentPolicyViolation } from "@/lib/utils";
-import { ApiKeyModal } from "@/components/api-key-modal";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import type { CreateStep } from "@/components/landing/create-stepper";
 import type { CreateStatus } from "@/components/landing/create-status-rail";
@@ -184,15 +182,12 @@ export function ComicCreationForm({
   const { uploadToS3 } = usePresignedUpload();
   const { isSignedIn, isLoaded } = useAuth();
   const { openSignIn } = useClerk();
-  const [apiKey, setApiKey] = useApiKey();
-  const hasApiKey = !!apiKey;
   const [previews, setPreviews] = useState<string[]>([]);
   const [showPreview, setShowPreview] = useState<number | null>(null);
   const [showStyleDropdown, setShowStyleDropdown] = useState(false);
   const [showAdvancedControls, setShowAdvancedControls] = useState(false);
   const [panelLayout, setPanelLayout] = useState(DEFAULT_PANEL_LAYOUT_ID);
   const [creditsRemaining, setCreditsRemaining] = useState<number | null>(null);
-  const [showApiModal, setShowApiModal] = useState(false);
   const [promptValidationMessage, setPromptValidationMessage] = useState<string | null>(null);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [sparkGenreFilter, setSparkGenreFilter] = useState<string | null>(null);
@@ -326,7 +321,7 @@ export function ComicCreationForm({
 
   // Fetch credits on mount.
   useEffect(() => {
-    if (isSignedIn && !hasApiKey) {
+    if (isSignedIn) {
       const fetchCredits = async () => {
         try {
           const response = await fetch("/api/check-credits", {
@@ -334,7 +329,7 @@ export function ComicCreationForm({
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ hasApiKey: false }),
+            body: JSON.stringify({}),
           });
           const data = await readJsonSafely(response);
           if (response.ok && data?.creditsRemaining !== undefined) {
@@ -345,10 +340,8 @@ export function ComicCreationForm({
         }
       };
       fetchCredits();
-    } else if (hasApiKey) {
-      setCreditsRemaining(null);
     }
-  }, [isSignedIn, hasApiKey]);
+  }, [isSignedIn]);
 
   // Keyboard shortcut for form submission.
   useKeyboardShortcut(
@@ -504,58 +497,60 @@ export function ComicCreationForm({
     }, 3500);
 
     try {
-      const hasApiKeyFlag = !!apiKey;
-      if (!hasApiKeyFlag) {
-        const creditsResponse = await fetch("/api/check-credits", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ hasApiKey: hasApiKeyFlag }),
+      const creditsResponse = await fetch("/api/check-credits", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+      const creditsData = await readJsonSafely(creditsResponse);
+
+      if (!creditsResponse.ok) {
+        toast({
+          title: "Error",
+          description: "Failed to check credits",
+          variant: "destructive",
         });
-        const creditsData = await readJsonSafely(creditsResponse);
+        onStatusChange?.("error", {
+          stageIndex: 0,
+          message: "Credit check failed. Please retry.",
+        });
+        setLegacyProgress((current) => ({
+          ...current,
+          generationStage: "check_credits",
+          failedStage: "check_credits",
+          isLoading: false,
+          lastGenerationError: "Failed to check credits",
+          currentStageLabel: "Credit check failed.",
+        }));
+        clearInterval(stepInterval);
+        setIsLoading(false);
+        return;
+      }
 
-        if (!creditsResponse.ok) {
-          toast({
-            title: "Error",
-            description: "Failed to check credits",
-            variant: "destructive",
-          });
-          onStatusChange?.("error", {
-            stageIndex: 0,
-            message: "Credit check failed. Please retry or add an API key.",
-          });
-          setLegacyProgress((current) => ({
-            ...current,
-            generationStage: "check_credits",
-            failedStage: "check_credits",
-            isLoading: false,
-            lastGenerationError: "Failed to check credits",
-            currentStageLabel: "Credit check failed.",
-          }));
-          clearInterval(stepInterval);
-          setIsLoading(false);
-          return;
-        }
-
-        if (creditsData?.creditsRemaining === 0) {
-          setShowApiModal(true);
-          onStatusChange?.("error", {
-            stageIndex: 0,
-            message: "No credits remaining. Add API key to continue.",
-          });
-          setLegacyProgress((current) => ({
-            ...current,
-            generationStage: "check_credits",
-            failedStage: "check_credits",
-            isLoading: false,
-            lastGenerationError: "No credits remaining",
-            currentStageLabel: "No credits remaining.",
-          }));
-          clearInterval(stepInterval);
-          setIsLoading(false);
-          return;
-        }
+      if (creditsData?.creditsRemaining === 0) {
+        onStatusChange?.("error", {
+          stageIndex: 0,
+          message: "No credits remaining.",
+        });
+        setLegacyProgress((current) => ({
+          ...current,
+          generationStage: "check_credits",
+          failedStage: "check_credits",
+          isLoading: false,
+          lastGenerationError: "No credits remaining",
+          currentStageLabel: "No credits remaining.",
+        }));
+        clearInterval(stepInterval);
+        setIsLoading(false);
+        toast({
+          title: "Out of credits",
+          description: "You have used all 15 of your weekly generations. Check back later!",
+          variant: "destructive",
+          duration: 4000,
+        });
+        return;
       }
 
       setLegacyProgress((current) => ({
@@ -599,7 +594,6 @@ export function ComicCreationForm({
         },
         body: JSON.stringify({
           prompt,
-          ...(apiKey && { apiKey }),
           style,
           panelLayout,
           characterImages: characterUploads,
@@ -693,10 +687,7 @@ export function ComicCreationForm({
     }
   };
 
-  const handleApiKeySubmit = (key: string) => {
-    setApiKey(key);
-    setShowApiModal(false);
-  };
+
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const isEnter = e.key === "Enter" || e.key === "\n" || e.keyCode === 13;
@@ -1073,7 +1064,7 @@ export function ComicCreationForm({
               Layout: {PANEL_LAYOUTS.find((l) => l.id === panelLayout)?.name ?? "5 Panels"}
             </span>
             <span className="rounded-full border border-border/70 px-2 py-1">
-              Est. cost: {hasApiKey ? "~$0.01" : "1 credit"}
+              Est. cost: 1 credit
             </span>
           </div>
         </div>
@@ -1214,15 +1205,9 @@ export function ComicCreationForm({
                       )}
                     </Button>
                     <div className="whitespace-nowrap text-xs text-muted-foreground">
-                      {hasApiKey ? (
-                        <>Using your API key (~$0.01 per comic)</>
-                      ) : (
-                        <>
-                          {creditsRemaining !== null
-                            ? `${creditsRemaining} credit${creditsRemaining === 1 ? "" : "s"} remaining`
-                            : "Checking credits..."}
-                        </>
-                      )}
+                      {creditsRemaining !== null
+                        ? `${creditsRemaining} credit${creditsRemaining === 1 ? "" : "s"} remaining`
+                        : "Checking credits..."}
                     </div>
                   </div>
                 ) : (
@@ -1271,11 +1256,6 @@ export function ComicCreationForm({
         </div>
       )}
 
-      <ApiKeyModal
-        isOpen={showApiModal}
-        onClose={() => setShowApiModal(false)}
-        onSubmit={handleApiKeySubmit}
-      />
     </>
   );
 }
