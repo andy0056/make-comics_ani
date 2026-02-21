@@ -192,10 +192,15 @@ export function ComicCreationForm({
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [sparkGenreFilter, setSparkGenreFilter] = useState<string | null>(null);
   const [displayedSparks, setDisplayedSparks] = useState<StorySpark[]>(() => {
-    // Show 3 random sparks initially
-    const shuffled = [...STORY_SPARKS].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, 3);
+    // Deterministic initial state for SSR to prevent hydration mismatches
+    return STORY_SPARKS.slice(0, 3);
   });
+
+  // Scramble the sparks on the client side only
+  useEffect(() => {
+    const shuffled = [...STORY_SPARKS].sort(() => Math.random() - 0.5);
+    setDisplayedSparks(shuffled.slice(0, 3));
+  }, []);
   const [sparkHistory, setSparkHistory] = useState<string[]>([]);
   const [legacyProgress, setLegacyProgress] = useState<GenerationProgressSnapshot>({
     generationStage: null,
