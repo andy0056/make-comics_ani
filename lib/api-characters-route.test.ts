@@ -92,6 +92,32 @@ describe("api/stories/[storySlug]/characters route", () => {
     expect(dbInsertMock).not.toHaveBeenCalled();
   });
 
+  it("rejects unknown character fields without mutating existing characters", async () => {
+    const response = await PUT(
+      buildRequest(
+        JSON.stringify({
+          characters: [
+            {
+              name: "Hero",
+              role: "Protagonist",
+              powerLevel: "over-9000",
+            },
+          ],
+        }),
+      ),
+      {
+        params: Promise.resolve({ storySlug: "story-slug" }),
+      },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: expect.stringMatching(/unrecognized|unknown/i),
+    });
+    expect(dbDeleteMock).not.toHaveBeenCalled();
+    expect(dbInsertMock).not.toHaveBeenCalled();
+  });
+
   it("persists normalized characters for valid payload", async () => {
     const response = await PUT(
       buildRequest(

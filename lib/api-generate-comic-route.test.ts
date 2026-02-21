@@ -170,6 +170,19 @@ describe("api/generate-comic route", () => {
     expect(reserveGenerationCreditMock).not.toHaveBeenCalled();
   });
 
+  it("rejects unknown payload keys before idempotency and credit reservation", async () => {
+    const response = await POST(
+      buildRequest({ prompt: "hello", debug: true }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: expect.stringMatching(/unrecognized|unknown/i),
+    });
+    expect(acquireGenerationIdempotencyMock).not.toHaveBeenCalled();
+    expect(reserveGenerationCreditMock).not.toHaveBeenCalled();
+  });
+
   it("requires a valid idempotency key header", async () => {
     getIdempotencyKeyFromHeadersMock.mockReturnValueOnce(null);
 
