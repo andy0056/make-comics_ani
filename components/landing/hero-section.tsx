@@ -1,10 +1,6 @@
 "use client";
 
-interface LandingHeroProps {
-  isAdvancedMode?: boolean;
-}
-
-export function LandingHero({ isAdvancedMode = false }: LandingHeroProps) {
+export function LandingHero() {
   return (
     <header className="relative py-8 sm:py-12 md:py-16 lg:py-0 overflow-hidden">
       {/* Comic-book halftone texture overlay */}

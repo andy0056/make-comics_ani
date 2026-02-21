@@ -109,7 +109,7 @@ export default function Home() {
             className={`w-full z-10 ${isAdvancedMode ? "max-w-xl mx-auto lg:mx-0" : "max-w-4xl mx-auto"
               }`}
           >
-            <LandingHero isAdvancedMode={isAdvancedMode} />
+            <LandingHero />
 
             <div className="space-y-4 sm:space-y-5 mt-4 sm:mt-5">
               {isGuidedSimpleMode && (

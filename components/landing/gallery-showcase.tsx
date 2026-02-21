@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 const GALLERY_ITEMS = [
     {
         src: "/gallery/noir.png",
@@ -30,8 +28,6 @@ const GALLERY_ITEMS = [
 ];
 
 export function GalleryShowcase() {
-    const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-
     return (
         <section className="py-12 sm:py-16 px-4 sm:px-6 border-t border-border/30">
             <div className="max-w-5xl mx-auto">
@@ -43,12 +39,10 @@ export function GalleryShowcase() {
                 </p>
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                    {GALLERY_ITEMS.map((item, i) => (
+                    {GALLERY_ITEMS.map((item) => (
                         <div
                             key={item.style}
                             className="group relative rounded-xl overflow-hidden cursor-pointer transition-all duration-300 border-2 border-border shadow-[4px_4px_0px_0px_var(--color-comic-yellow)] hover:shadow-[6px_6px_0px_0px_var(--color-comic-cyan)] hover:-translate-y-1"
-                            onMouseEnter={() => setHoveredIndex(i)}
-                            onMouseLeave={() => setHoveredIndex(null)}
                         >
                             {/* Image */}
                             <img
