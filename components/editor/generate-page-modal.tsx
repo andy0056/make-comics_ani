@@ -291,6 +291,19 @@ export function GeneratePageModal({
               e.preventDefault();
             }
           }}
+          onPointerDownOutside={(e) => {
+            const target = e.target as Element;
+            if (target.closest && target.closest('#kaboom-bot-widget')) {
+              // Prevent radix from stealing focus back when clicking bot
+              e.preventDefault();
+            }
+          }}
+          onFocusOutside={(e) => {
+            const target = e.target as Element;
+            if (target.closest && target.closest('#kaboom-bot-widget')) {
+              e.preventDefault();
+            }
+          }}
           className="border border-border/50 rounded-lg bg-background max-w-3xl w-[95vw] max-h-[90vh] overflow-y-auto"
         >
           <DialogHeader>
