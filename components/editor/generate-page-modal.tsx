@@ -106,6 +106,7 @@ export function GeneratePageModal({
   const [panelLayout, setPanelLayout] = useState(defaultPanelLayout);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const wasOpenRef = useRef(false);
   const { toast } = useToast();
   const { uploadToS3 } = usePresignedUpload();
   const showOptionalControls = isAdvancedMode || showAdvancedControls;
@@ -114,52 +115,60 @@ export function GeneratePageModal({
 
   // Reset form and initialize characters when modal opens
   useEffect(() => {
-    if (isOpen) {
-      setPrompt(isRedrawMode ? existingPrompt : "");
-      setShowPreview(null);
-      setIsGenerating(false);
-      setShowAdvancedControls(isAdvancedMode);
-      setDisplayedSparks(getRandomSparks(3));
-      setPanelLayout(defaultPanelLayout);
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      return;
+    }
 
-      // Initialize characters
-      const existingItems: CharacterItem[] = existingCharacters.map((url) => ({
-        url,
-        isNew: false,
-      }));
-      setCharacters(existingItems);
+    if (wasOpenRef.current) {
+      return;
+    }
 
-      // Smart selection
-      const defaultSelected = new Set<number>();
-      const charactersToSelect: string[] = [];
-      if (lastPageCharacters.length >= 2) {
-        charactersToSelect.push(...lastPageCharacters.slice(0, 2));
-      } else {
-        charactersToSelect.push(...lastPageCharacters);
-        if (charactersToSelect.length < 2 && previousPageCharacters.length > 0) {
-          for (const charUrl of previousPageCharacters) {
-            if (!charactersToSelect.includes(charUrl) && charactersToSelect.length < 2) {
-              charactersToSelect.push(charUrl);
-            }
+    wasOpenRef.current = true;
+    setPrompt(isRedrawMode ? existingPrompt : "");
+    setShowPreview(null);
+    setIsGenerating(false);
+    setShowAdvancedControls(isAdvancedMode);
+    setDisplayedSparks(getRandomSparks(3));
+    setPanelLayout(defaultPanelLayout);
+
+    // Initialize characters
+    const existingItems: CharacterItem[] = existingCharacters.map((url) => ({
+      url,
+      isNew: false,
+    }));
+    setCharacters(existingItems);
+
+    // Smart selection
+    const defaultSelected = new Set<number>();
+    const charactersToSelect: string[] = [];
+    if (lastPageCharacters.length >= 2) {
+      charactersToSelect.push(...lastPageCharacters.slice(0, 2));
+    } else {
+      charactersToSelect.push(...lastPageCharacters);
+      if (charactersToSelect.length < 2 && previousPageCharacters.length > 0) {
+        for (const charUrl of previousPageCharacters) {
+          if (!charactersToSelect.includes(charUrl) && charactersToSelect.length < 2) {
+            charactersToSelect.push(charUrl);
           }
         }
       }
-      charactersToSelect.forEach((charUrl) => {
-        const index = existingItems.findIndex((item) => item.url === charUrl);
-        if (index !== -1) defaultSelected.add(index);
-      });
-      setSelectedCharacterIndices(defaultSelected);
-
-      // Intelligently steal focus only if the user is not actively chatting with the bot
-      const activeEl = document.activeElement;
-      if (!activeEl?.closest(BOT_ROOT_SELECTOR)) {
-        // Small timeout allows the modal to finish animating in
-        setTimeout(() => {
-          textareaRef.current?.focus();
-        }, 50);
-      }
     }
-  }, [isOpen, isRedrawMode, existingPrompt, existingCharacters, lastPageCharacters, previousPageCharacters, isAdvancedMode]);
+    charactersToSelect.forEach((charUrl) => {
+      const index = existingItems.findIndex((item) => item.url === charUrl);
+      if (index !== -1) defaultSelected.add(index);
+    });
+    setSelectedCharacterIndices(defaultSelected);
+
+    // Intelligently steal focus only if the user is not actively chatting with the bot
+    const activeEl = document.activeElement;
+    if (!activeEl?.closest(BOT_ROOT_SELECTOR)) {
+      // Small timeout allows the modal to finish animating in
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 50);
+    }
+  }, [isOpen, isRedrawMode, existingPrompt, existingCharacters, lastPageCharacters, previousPageCharacters, isAdvancedMode, defaultPanelLayout]);
 
   useKeyboardShortcut(
     () => {

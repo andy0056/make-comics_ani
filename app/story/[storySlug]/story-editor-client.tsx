@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { HelpCircle, Wand2, RefreshCw, Trash2, LayoutTemplate } from "lucide-react";
 import { AIGuideSidePanel } from "@/components/editor/ai-guide-side-panel";
 import { useParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
@@ -161,12 +160,29 @@ export function StoryEditorClient() {
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        return;
+      }
+
+      if (showGenerateModal) {
+        return;
+      }
+
       // Don't trigger shortcuts if user is typing in an input field
-      const target = e.target as HTMLElement;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-kaboom-bot-root="true"]')) {
+        return;
+      }
+
+      const selectedText = window.getSelection()?.toString().trim();
+      if (selectedText) {
+        return;
+      }
+
       if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable
       ) {
         return;
       }
@@ -194,7 +210,7 @@ export function StoryEditorClient() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pages.length]);
+  }, [pages.length, showGenerateModal]);
 
 
   const handleAddPage = async () => {

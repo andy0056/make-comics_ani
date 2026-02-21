@@ -6,10 +6,20 @@ import { MessageCircle, X, Send, Bot, Sparkles, Zap, HelpCircle, Copy, Check } f
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+type ChatMeta = {
+    finishReason: string | null;
+    retryCount: number;
+    isTruncated: boolean;
+    canContinue: boolean;
+};
+
 type Message = {
     role: "user" | "assistant";
     content: string;
+    meta?: ChatMeta;
 };
+
+const CONTINUE_TRUNCATED_PROMPT = "Continue the previous answer from exactly where you stopped. Do not repeat prior text.";
 
 const getSuggestedActions = (pathname: string) => {
     if (pathname === "/stories") {
@@ -116,10 +126,24 @@ export function AIGuideWidget() {
             if (!response.ok) throw new Error("Failed to fetch response");
 
             const data = await response.json();
+            const meta: ChatMeta | undefined = data?.meta
+                ? {
+                    finishReason: typeof data.meta.finishReason === "string" ? data.meta.finishReason : null,
+                    retryCount: typeof data.meta.retryCount === "number" ? data.meta.retryCount : 0,
+                    isTruncated: Boolean(data.meta.isTruncated),
+                    canContinue: Boolean(data.meta.canContinue),
+                }
+                : undefined;
 
             setMessages((prev) => [
                 ...prev,
-                { role: "assistant", content: data.reply },
+                {
+                    role: "assistant",
+                    content: typeof data.reply === "string" && data.reply.trim()
+                        ? data.reply
+                        : "Sorry, I couldn't process that right now. 💥",
+                    meta,
+                },
             ]);
         } catch (error) {
             console.error("Chat error:", error);
@@ -152,6 +176,13 @@ export function AIGuideWidget() {
             return <span key={i}>{part}</span>;
         });
     };
+
+    const latestAssistantIndex = (() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i]?.role === "assistant") return i;
+        }
+        return -1;
+    })();
 
     if (pathname.startsWith("/story/")) {
         return null;
@@ -202,6 +233,22 @@ export function AIGuideWidget() {
                                     )}
                                 >
                                     {renderMarkdown(msg.content)}
+                                    {msg.role === "assistant" &&
+                                        idx === latestAssistantIndex &&
+                                        msg.meta?.isTruncated &&
+                                        msg.meta?.canContinue && (
+                                            <div className="mt-2 flex items-center gap-2 text-[11px]">
+                                                <span className="text-amber-400/90">Response was shortened.</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSend(CONTINUE_TRUNCATED_PROMPT)}
+                                                    disabled={isLoading}
+                                                    className="rounded px-1.5 py-0.5 border border-border/50 bg-background/60 text-indigo hover:text-white disabled:opacity-50"
+                                                >
+                                                    Continue
+                                                </button>
+                                            </div>
+                                        )}
                                     {msg.role === "assistant" && (
                                         <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                             {/* Send to Editor Button */}

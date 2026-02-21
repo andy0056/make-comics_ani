@@ -6,10 +6,20 @@ import { Send, Bot, Sparkles, Zap, HelpCircle, Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+type ChatMeta = {
+    finishReason: string | null;
+    retryCount: number;
+    isTruncated: boolean;
+    canContinue: boolean;
+};
+
 type Message = {
     role: "user" | "assistant";
     content: string;
+    meta?: ChatMeta;
 };
+
+const CONTINUE_TRUNCATED_PROMPT = "Continue the previous answer from exactly where you stopped. Do not repeat prior text.";
 
 const getSuggestedActions = (pathname: string) => {
     if (pathname === "/stories") {
@@ -53,6 +63,33 @@ export function AIGuideSidePanel() {
         scrollToBottom();
     }, [messages]);
 
+    useEffect(() => {
+        const panel = document.getElementById("kaboom-bot-side-panel");
+        if (!panel) return;
+
+        const stopEvent = (e: Event) => {
+            if (e.type === "keydown") {
+                const ke = e as KeyboardEvent;
+                if ((ke.metaKey || ke.ctrlKey) && ["c", "v", "x", "a", "z"].includes(ke.key.toLowerCase())) {
+                    return;
+                }
+            }
+            e.stopPropagation();
+        };
+
+        panel.addEventListener("pointerdown", stopEvent);
+        panel.addEventListener("mousedown", stopEvent);
+        panel.addEventListener("keydown", stopEvent);
+        panel.addEventListener("focusin", stopEvent);
+
+        return () => {
+            panel.removeEventListener("pointerdown", stopEvent);
+            panel.removeEventListener("mousedown", stopEvent);
+            panel.removeEventListener("keydown", stopEvent);
+            panel.removeEventListener("focusin", stopEvent);
+        };
+    }, []);
+
     const handleSend = async (text: string = input) => {
         if (!text.trim() || isLoading) return;
 
@@ -81,10 +118,24 @@ export function AIGuideSidePanel() {
             if (!response.ok) throw new Error("Failed to fetch response");
 
             const data = await response.json();
+            const meta: ChatMeta | undefined = data?.meta
+                ? {
+                    finishReason: typeof data.meta.finishReason === "string" ? data.meta.finishReason : null,
+                    retryCount: typeof data.meta.retryCount === "number" ? data.meta.retryCount : 0,
+                    isTruncated: Boolean(data.meta.isTruncated),
+                    canContinue: Boolean(data.meta.canContinue),
+                }
+                : undefined;
 
             setMessages((prev) => [
                 ...prev,
-                { role: "assistant", content: data.reply },
+                {
+                    role: "assistant",
+                    content: typeof data.reply === "string" && data.reply.trim()
+                        ? data.reply
+                        : "Sorry, I couldn't process that right now. 💥",
+                    meta,
+                },
             ]);
         } catch (error) {
             console.error("Chat error:", error);
@@ -118,6 +169,13 @@ export function AIGuideSidePanel() {
         });
     };
 
+    const latestAssistantIndex = (() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i]?.role === "assistant") return i;
+        }
+        return -1;
+    })();
+
     return (
         <div id="kaboom-bot-side-panel" data-kaboom-bot-root="true" className="flex flex-col w-80 lg:w-96 border-l border-border bg-muted/20 h-full shrink-0">
             {/* Header */}
@@ -150,6 +208,22 @@ export function AIGuideSidePanel() {
                             )}
                         >
                             {renderMarkdown(msg.content)}
+                            {msg.role === "assistant" &&
+                                idx === latestAssistantIndex &&
+                                msg.meta?.isTruncated &&
+                                msg.meta?.canContinue && (
+                                    <div className="mt-2 flex items-center gap-2 text-[11px]">
+                                        <span className="text-amber-400/90">Response was shortened.</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSend(CONTINUE_TRUNCATED_PROMPT)}
+                                            disabled={isLoading}
+                                            className="rounded px-1.5 py-0.5 border border-border/50 bg-background/60 text-indigo hover:text-white disabled:opacity-50"
+                                        >
+                                            Continue
+                                        </button>
+                                    </div>
+                                )}
                             {msg.role === "assistant" && (
                                 <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     {/* Send to Editor Button */}

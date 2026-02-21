@@ -4,6 +4,66 @@ import { db } from "@/lib/db";
 import { stories, pages } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 
+type ErrorInspection = {
+  codes: Set<string>;
+  messages: string[];
+};
+
+function inspectError(error: unknown): ErrorInspection {
+  const queue: unknown[] = [error];
+  const visited = new Set<unknown>();
+  const codes = new Set<string>();
+  const messages: string[] = [];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+
+    if (current instanceof Error) {
+      messages.push(current.message);
+
+      const maybeCode = (current as { code?: unknown }).code;
+      if (typeof maybeCode === "string") {
+        codes.add(maybeCode);
+      }
+
+      const maybeCause = (current as { cause?: unknown }).cause;
+      if (maybeCause) {
+        queue.push(maybeCause);
+      }
+    }
+
+    if (
+      typeof current === "object" &&
+      current !== null &&
+      "errors" in current
+    ) {
+      const nestedErrors = (current as { errors?: unknown }).errors;
+      if (Array.isArray(nestedErrors)) {
+        queue.push(...nestedErrors);
+      }
+    }
+  }
+
+  return { codes, messages };
+}
+
+function isDatabaseUnavailableError(error: unknown): boolean {
+  const { codes, messages } = inspectError(error);
+  const knownCodes = ["ECONNREFUSED", "ENOTFOUND", "EHOSTUNREACH", "ETIMEDOUT"];
+
+  if (knownCodes.some((code) => codes.has(code))) {
+    return true;
+  }
+
+  return messages.some((message) =>
+    /connection refused|database.*unavailable|timeout/i.test(message),
+  );
+}
+
 type StoryListRow = {
   id: string;
   title: string;
@@ -185,19 +245,28 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Error fetching user stories:", error);
+    const inspection = inspectError(error);
+    const isDatabaseUnavailable = isDatabaseUnavailableError(error);
     const detail =
       process.env.NODE_ENV === "development"
         ? error instanceof Error
-          ? { message: error.message, stack: error.stack }
+          ? {
+              message: error.message,
+              stack: error.stack,
+              codes: Array.from(inspection.codes),
+              causes: inspection.messages,
+            }
           : { message: String(error) }
         : undefined;
 
     return NextResponse.json(
       {
-        error: "Failed to fetch stories",
+        error: isDatabaseUnavailable
+          ? "Database unavailable. Ensure Postgres is running and DATABASE_URL is reachable."
+          : "Failed to fetch stories",
         ...(detail ? { detail } : {}),
       },
-      { status: 500 }
+      { status: isDatabaseUnavailable ? 503 : 500 }
     );
   }
 }

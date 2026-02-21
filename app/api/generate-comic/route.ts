@@ -22,6 +22,66 @@ import {
 } from "@/lib/comic-ai-service";
 import { getImageModelAdapterProfiles } from "@/lib/model-adapters";
 
+type ErrorInspection = {
+  codes: Set<string>;
+  messages: string[];
+};
+
+function inspectError(error: unknown): ErrorInspection {
+  const queue: unknown[] = [error];
+  const visited = new Set<unknown>();
+  const codes = new Set<string>();
+  const messages: string[] = [];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+
+    if (current instanceof Error) {
+      messages.push(current.message);
+
+      const maybeCode = (current as { code?: unknown }).code;
+      if (typeof maybeCode === "string") {
+        codes.add(maybeCode);
+      }
+
+      const maybeCause = (current as { cause?: unknown }).cause;
+      if (maybeCause) {
+        queue.push(maybeCause);
+      }
+    }
+
+    if (
+      typeof current === "object" &&
+      current !== null &&
+      "errors" in current
+    ) {
+      const nestedErrors = (current as { errors?: unknown }).errors;
+      if (Array.isArray(nestedErrors)) {
+        queue.push(...nestedErrors);
+      }
+    }
+  }
+
+  return { codes, messages };
+}
+
+function isDatabaseUnavailableError(error: unknown): boolean {
+  const { codes, messages } = inspectError(error);
+  const knownCodes = ["ECONNREFUSED", "ENOTFOUND", "EHOSTUNREACH", "ETIMEDOUT"];
+
+  if (knownCodes.some((code) => codes.has(code))) {
+    return true;
+  }
+
+  return messages.some((message) =>
+    /connection refused|database.*unavailable|timeout/i.test(message),
+  );
+}
+
 function isInvalidReferenceImageError(error: unknown) {
   if (!(error instanceof Error)) {
     return false;
@@ -304,12 +364,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(responseData);
   } catch (error) {
     console.error("Error in generate-comic API:", error);
+    const inspection = inspectError(error);
+    const isDatabaseUnavailable = isDatabaseUnavailableError(error);
+    const detail =
+      process.env.NODE_ENV === "development"
+        ? {
+            message: error instanceof Error ? error.message : String(error),
+            codes: Array.from(inspection.codes),
+            causes: inspection.messages,
+          }
+        : undefined;
+
     return NextResponse.json(
       {
-        error: `Internal server error: ${error instanceof Error ? error.message : "Unknown error"
-          }`,
+        error: isDatabaseUnavailable
+          ? "Database unavailable. Ensure Postgres is running and DATABASE_URL is reachable."
+          : `Internal server error: ${error instanceof Error ? error.message : "Unknown error"
+            }`,
+        ...(detail ? { detail } : {}),
       },
-      { status: 500 },
+      { status: isDatabaseUnavailable ? 503 : 500 },
     );
   }
 }
