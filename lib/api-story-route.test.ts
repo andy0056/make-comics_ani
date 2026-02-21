@@ -26,7 +26,7 @@ vi.mock("@/lib/db-actions", () => ({
   deleteStory: deleteStoryMock,
 }));
 
-import { PUT } from "@/app/api/stories/[storySlug]/route";
+import { GET, PUT } from "@/app/api/stories/[storySlug]/route";
 
 function buildRequest(body: string) {
   return new NextRequest("http://localhost/api/stories/story-slug", {
@@ -48,6 +48,18 @@ describe("api/stories/[storySlug] route", () => {
       pages: [],
       access: { isOwner: true },
     });
+  });
+
+  it("rejects invalid storySlug params for GET", async () => {
+    const response = await GET(new NextRequest("http://localhost/api/stories/x"), {
+      params: Promise.resolve({ storySlug: " ".repeat(200) }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: expect.stringContaining("storySlug"),
+    });
+    expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
   });
 
   it("rejects invalid JSON payload", async () => {

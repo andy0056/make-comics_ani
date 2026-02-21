@@ -4,6 +4,7 @@ import { deleteStory, updateStory } from "@/lib/db-actions";
 import { getOwnedStoryWithPagesBySlug } from "@/lib/story-access";
 import {
   getRequestValidationErrorMessage,
+  storySlugParamSchema,
   storyTitleUpdateRequestSchema,
 } from "@/lib/api-request-validation";
 
@@ -21,14 +22,14 @@ export async function GET(
       );
     }
 
-    const { storySlug: slug } = await params;
-
-    if (!slug) {
+    const parsedParams = storySlugParamSchema.safeParse(await params);
+    if (!parsedParams.success) {
       return NextResponse.json(
-        { error: "Story slug is required" },
+        { error: getRequestValidationErrorMessage(parsedParams.error) },
         { status: 400 },
       );
     }
+    const { storySlug: slug } = parsedParams.data;
 
     const accessResult = await getOwnedStoryWithPagesBySlug({
       storySlug: slug,
@@ -73,14 +74,14 @@ export async function PUT(
       );
     }
 
-    const { storySlug: slug } = await params;
-
-    if (!slug) {
+    const parsedParams = storySlugParamSchema.safeParse(await params);
+    if (!parsedParams.success) {
       return NextResponse.json(
-        { error: "Story slug is required" },
+        { error: getRequestValidationErrorMessage(parsedParams.error) },
         { status: 400 },
       );
     }
+    const { storySlug: slug } = parsedParams.data;
 
     const accessResult = await getOwnedStoryWithPagesBySlug({
       storySlug: slug,
@@ -140,14 +141,14 @@ export async function DELETE(
       );
     }
 
-    const { storySlug: slug } = await params;
-
-    if (!slug) {
+    const parsedParams = storySlugParamSchema.safeParse(await params);
+    if (!parsedParams.success) {
       return NextResponse.json(
-        { error: "Story slug is required" },
+        { error: getRequestValidationErrorMessage(parsedParams.error) },
         { status: 400 },
       );
     }
+    const { storySlug: slug } = parsedParams.data;
 
     const accessResult = await getOwnedStoryWithPagesBySlug({
       storySlug: slug,

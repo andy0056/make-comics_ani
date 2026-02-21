@@ -2,6 +2,10 @@ import { type NextRequest, NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { pages, stories } from "@/lib/schema";
+import {
+    getRequestValidationErrorMessage,
+    storySlugParamSchema,
+} from "@/lib/api-request-validation";
 
 /**
  * Public endpoint for viewing shared stories. No authentication required.
@@ -12,14 +16,14 @@ export async function GET(
     { params }: { params: Promise<{ storySlug: string }> }
 ) {
     try {
-        const { storySlug: slug } = await params;
-
-        if (!slug) {
+        const parsedParams = storySlugParamSchema.safeParse(await params);
+        if (!parsedParams.success) {
             return NextResponse.json(
-                { error: "Story slug is required" },
+                { error: getRequestValidationErrorMessage(parsedParams.error) },
                 { status: 400 }
             );
         }
+        const slug = parsedParams.data.storySlug;
 
         const token = request.nextUrl.searchParams.get("token")?.trim();
         if (!token) {

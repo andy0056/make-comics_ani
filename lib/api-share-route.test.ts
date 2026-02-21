@@ -55,6 +55,20 @@ describe("api/share/[storySlug]", () => {
     vi.clearAllMocks();
   });
 
+  it("returns 400 when story slug params are invalid", async () => {
+    const req = new NextRequest("http://localhost/api/share/story-slug?token=t");
+
+    const res = await GET(req, {
+      params: Promise.resolve({ storySlug: " ".repeat(200) }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: expect.stringContaining("storySlug"),
+    });
+    expect(selectMock).not.toHaveBeenCalled();
+  });
+
   it("returns 404 when token is missing", async () => {
     const req = new NextRequest("http://localhost/api/share/story-slug");
 
