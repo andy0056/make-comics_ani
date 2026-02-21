@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { pages, stories } from "@/lib/schema";
 import {
     getRequestValidationErrorMessage,
+    shareTokenQuerySchema,
     storySlugParamSchema,
 } from "@/lib/api-request-validation";
 
@@ -25,10 +26,13 @@ export async function GET(
         }
         const slug = parsedParams.data.storySlug;
 
-        const token = request.nextUrl.searchParams.get("token")?.trim();
-        if (!token) {
+        const parsedTokenQuery = shareTokenQuerySchema.safeParse({
+            token: request.nextUrl.searchParams.get("token"),
+        });
+        if (!parsedTokenQuery.success) {
             return NextResponse.json({ error: "Story not found" }, { status: 404 });
         }
+        const token = parsedTokenQuery.data.token.toLowerCase();
 
         const storyRows = await db
             .select()
