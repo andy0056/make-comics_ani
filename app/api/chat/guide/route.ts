@@ -9,6 +9,7 @@ import {
     chatGuideRequestSchema,
     getRequestValidationErrorMessage,
 } from "@/lib/api-request-validation";
+import { buildChatRateLimitKey } from "@/lib/request-client";
 
 // Define the API route response format
 
@@ -190,9 +191,20 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
 
 export async function POST(req: Request) {
     try {
+        let userId: string | null = null;
+        try {
+            const authResult = await auth();
+            userId = authResult.userId ?? null;
+        } catch (error) {
+            console.error("Failed to resolve chat authentication context:", error);
+        }
+
         if (ratelimit) {
-            const ip = req.headers.get("x-forwarded-for") ?? "127.0.0.1";
-            const { success } = await ratelimit.limit(`chat_${ip}`);
+            const rateLimitKey = buildChatRateLimitKey({
+                headers: req.headers,
+                userId,
+            });
+            const { success } = await ratelimit.limit(rateLimitKey);
             if (!success) {
                 return NextResponse.json(
                     { error: "Whoa there, speedster! ⚡ You're sending messages too fast. Take a breath and try again in a minute." },
@@ -223,7 +235,6 @@ export async function POST(req: Request) {
         let compactDatabaseContext = "";
         if (typeof storySlug === "string" && storySlug.trim().length > 0) {
             try {
-                const { userId } = await auth();
                 if (userId) {
                     const storyData = await getStoryWithPagesBySlug(storySlug);
                     if (storyData && storyData.story.userId === userId) {
