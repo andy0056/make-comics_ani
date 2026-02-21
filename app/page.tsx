@@ -4,6 +4,8 @@ import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
 import { LandingHero } from "@/components/landing/hero-section";
 import { ComicCreationForm } from "@/components/landing/comic-creation-form";
+import { HowItWorks } from "@/components/landing/how-it-works";
+import { GalleryShowcase } from "@/components/landing/gallery-showcase";
 import { useState, useEffect } from "react";
 import { CreateStepper, type CreateStep } from "@/components/landing/create-stepper";
 import {
@@ -95,20 +97,17 @@ export default function Home() {
       <Navbar />
 
       <main
-        className={`flex-1 flex min-h-[calc(100vh-6rem)] ${
-          isAdvancedMode ? "flex-col lg:flex-row" : "flex-col"
-        }`}
+        className={`flex-1 flex min-h-[calc(100vh-6rem)] ${isAdvancedMode ? "flex-col lg:flex-row" : "flex-col"
+          }`}
       >
         {/* Left: Controls & Input */}
         <div
-          className={`w-full flex flex-col justify-center px-4 sm:px-6 py-4 sm:py-6 relative ${
-            isAdvancedMode ? "lg:w-1/2 lg:px-12 xl:px-20" : "max-w-5xl mx-auto"
-          }`}
+          className={`w-full flex flex-col justify-center px-4 sm:px-6 py-4 sm:py-6 relative ${isAdvancedMode ? "lg:w-1/2 lg:px-12 xl:px-20" : "max-w-5xl mx-auto"
+            }`}
         >
           <div
-            className={`w-full z-10 ${
-              isAdvancedMode ? "max-w-xl mx-auto lg:mx-0" : "max-w-4xl mx-auto"
-            }`}
+            className={`w-full z-10 ${isAdvancedMode ? "max-w-xl mx-auto lg:mx-0" : "max-w-4xl mx-auto"
+              }`}
           >
             <LandingHero isAdvancedMode={isAdvancedMode} />
 
@@ -164,6 +163,9 @@ export default function Home() {
         </div>
 
       </main>
+
+      <HowItWorks />
+      <GalleryShowcase />
 
       <Footer />
     </div>
