@@ -12,6 +12,7 @@ import PlausibleProvider from "next-plausible"
 import { ClerkProvider } from "@clerk/nextjs"
 import { GlobalErrorBoundary } from "@/components/ui/error-boundary"
 import { FeedbackWidget } from "@/components/ui/feedback-widget"
+import { AIGuideWidget } from "@/components/ui/ai-guide-widget"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
@@ -52,6 +53,7 @@ export default function RootLayout({
           <GlobalErrorBoundary>
             {children}
             <FeedbackWidget />
+            <AIGuideWidget />
           </GlobalErrorBoundary>
           <Analytics />
           <Toaster />
