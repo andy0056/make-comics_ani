@@ -7,6 +7,7 @@ const {
   createPageMock,
   getNextPageNumberMock,
   getStoryWithPagesBySlugMock,
+  checkGenerationBurstLimitMock,
   reserveGenerationCreditMock,
   refundGenerationCreditMock,
   uploadImageToS3Mock,
@@ -25,6 +26,7 @@ const {
   createPageMock: vi.fn(),
   getNextPageNumberMock: vi.fn(),
   getStoryWithPagesBySlugMock: vi.fn(),
+  checkGenerationBurstLimitMock: vi.fn(),
   reserveGenerationCreditMock: vi.fn(),
   refundGenerationCreditMock: vi.fn(),
   uploadImageToS3Mock: vi.fn(),
@@ -51,6 +53,7 @@ vi.mock("@/lib/db-actions", () => ({
 }));
 
 vi.mock("@/lib/rate-limit", () => ({
+  checkGenerationBurstLimit: checkGenerationBurstLimitMock,
   reserveGenerationCredit: reserveGenerationCreditMock,
   refundGenerationCredit: refundGenerationCreditMock,
 }));
@@ -107,6 +110,12 @@ describe("api/add-page route", () => {
     acquireGenerationIdempotencyMock.mockResolvedValue({
       kind: "acquired",
       token: { enabled: true, redisKey: "lock-2" },
+    });
+    checkGenerationBurstLimitMock.mockResolvedValue({
+      success: true,
+      limit: 6,
+      remaining: 5,
+      reset: Date.now() + 60,
     });
 
     reserveGenerationCreditMock.mockResolvedValue({
@@ -166,8 +175,32 @@ describe("api/add-page route", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ imageUrl: "https://cached" });
+    expect(checkGenerationBurstLimitMock).not.toHaveBeenCalled();
     expect(reserveGenerationCreditMock).not.toHaveBeenCalled();
     expect(generateComicImageWithAdapterFallbackMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 when burst page-generation limit is exceeded", async () => {
+    checkGenerationBurstLimitMock.mockResolvedValueOnce({
+      success: false,
+      limit: 6,
+      remaining: 0,
+      reset: 54321,
+    });
+
+    const response = await POST(
+      buildRequest({ storyId: "story-slug", prompt: "continue" }),
+    );
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({
+      error:
+        "Too many page-generation attempts in a short time. Please wait a minute and retry.",
+      isRateLimited: true,
+      creditsRemaining: 0,
+      resetTime: 54321,
+    });
+    expect(reserveGenerationCreditMock).not.toHaveBeenCalled();
   });
 
   it("refunds credits when add-page generation fails", async () => {

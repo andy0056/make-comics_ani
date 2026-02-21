@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { freeTierRateLimit } from "@/lib/rate-limit";
+import { getGenerationCreditStatus } from "@/lib/rate-limit";
 
 export async function POST() {
   try {
@@ -13,9 +13,7 @@ export async function POST() {
       );
     }
 
-    // Enforce rate limits universally (no API key bypass)
-    // For free tier, check rate limit status via Redis
-    const limitResult = await freeTierRateLimit.getRemaining(userId);
+    const limitResult = await getGenerationCreditStatus(userId);
 
     return NextResponse.json({
       hasApiKey: false,
@@ -26,8 +24,7 @@ export async function POST() {
     console.error("Error in check-credits API:", error);
     return NextResponse.json(
       {
-        error: `Internal server error: ${error instanceof Error ? error.message : "Unknown error"
-          }`,
+        error: "Internal server error.",
       },
       { status: 500 }
     );

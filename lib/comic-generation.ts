@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { freeTierRateLimit } from '@/lib/rate-limit'
+import { reserveGenerationCredit } from '@/lib/rate-limit'
 import { apiError } from '@/lib/api-route'
 
 const PRIMARY_GEMINI_IMAGE_MODEL = 'google/gemini-3-pro-image'
@@ -86,7 +86,7 @@ export async function resolveTogetherApiKey({
     }
   }
 
-  const rateLimitResult = await freeTierRateLimit.limit(userId)
+  const rateLimitResult = await reserveGenerationCredit(userId)
   if (!rateLimitResult.success) {
     return {
       response: NextResponse.json(
