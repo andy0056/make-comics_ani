@@ -17,6 +17,7 @@ interface PageData {
 interface ComicCanvasProps {
   page: PageData;
   pageIndex: number;
+  storySlug?: string;
   totalPages?: number;
   isLoading?: boolean;
   isOwner?: boolean;
@@ -30,6 +31,7 @@ interface ComicCanvasProps {
 export function ComicCanvas({
   page,
   pageIndex,
+  storySlug,
   totalPages = 1,
   isLoading = false,
   isOwner = true,
@@ -40,6 +42,37 @@ export function ComicCanvas({
   onPrevPage,
 }: ComicCanvasProps) {
   const { toast } = useToast();
+
+  const getShareUrl = async (): Promise<string> => {
+    if (!isOwner) {
+      return window.location.href;
+    }
+
+    const slug = storySlug || window.location.pathname.split("/").pop();
+    if (!slug) {
+      throw new Error("Could not determine story slug");
+    }
+
+    const response = await fetch(`/api/stories/${slug}/share`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action: "enable" }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data?.error || "Failed to create share link");
+    }
+
+    const shareUrl = data?.share?.shareUrl;
+    if (!shareUrl) {
+      throw new Error("Share link is unavailable");
+    }
+
+    return shareUrl;
+  };
 
   return (
     <main className="flex-1 overflow-auto p-4 md:p-8 flex items-start justify-center relative">
@@ -178,7 +211,23 @@ export function ComicCanvas({
                variant="ghost"
                className="hover:bg-secondary text-muted-foreground hover:text-white gap-2 text-xs h-9 px-3 flex-1"
                onClick={async () => {
-                 const url = window.location.href;
+                 let url = window.location.href;
+                 try {
+                   url = await getShareUrl();
+                 } catch (shareError) {
+                   console.error("Failed to prepare share URL:", shareError);
+                   toast({
+                     title: "Failed to share",
+                     description:
+                       shareError instanceof Error
+                         ? shareError.message
+                         : "Could not create a public share link.",
+                     variant: "destructive",
+                     duration: 3000,
+                   });
+                   return;
+                 }
+
                  if (navigator.share) {
                    try {
                      await navigator.share({
@@ -191,7 +240,7 @@ export function ComicCanvas({
                        await navigator.clipboard.writeText(url);
                        toast({
                          title: "Link copied!",
-                         description: "Story URL has been copied to your clipboard.",
+                         description: "Share URL has been copied to your clipboard.",
                          duration: 2000,
                        });
                      } catch (clipboardErr) {
@@ -210,7 +259,7 @@ export function ComicCanvas({
                      await navigator.clipboard.writeText(url);
                      toast({
                        title: "Link copied!",
-                       description: "Story URL has been copied to your clipboard.",
+                       description: "Share URL has been copied to your clipboard.",
                        duration: 2000,
                      });
                    } catch (err) {

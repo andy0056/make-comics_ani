@@ -558,6 +558,7 @@ export function StoryEditorClient() {
   return (
     <div className="h-screen flex flex-col bg-background">
       <EditorToolbar
+        storySlug={story.slug}
         title={story.title}
         onContinueStory={handleAddPage}
         onDownloadPDF={downloadPDF}
@@ -583,6 +584,7 @@ export function StoryEditorClient() {
         <ComicCanvas
           page={pages[currentPage]}
           pageIndex={currentPage}
+          storySlug={story.slug}
           totalPages={pages.length}
           isLoading={loadingPageId === currentPage}
           isOwner={isOwner}
