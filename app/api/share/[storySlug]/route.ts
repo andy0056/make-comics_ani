@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { pages, stories } from "@/lib/schema";
@@ -7,6 +8,16 @@ import {
     shareTokenQuerySchema,
     storySlugParamSchema,
 } from "@/lib/api-request-validation";
+
+function isShareTokenMatch(providedToken: string, expectedToken: string): boolean {
+    const provided = Buffer.from(providedToken);
+    const expected = Buffer.from(expectedToken);
+    if (provided.length !== expected.length) {
+        return false;
+    }
+
+    return timingSafeEqual(provided, expected);
+}
 
 /**
  * Public endpoint for viewing shared stories. No authentication required.
@@ -42,7 +53,12 @@ export async function GET(
 
         const story = storyRows[0];
 
-        if (!story || !story.isPublicShare || !story.shareToken || story.shareToken !== token) {
+        if (
+            !story ||
+            !story.isPublicShare ||
+            !story.shareToken ||
+            !isShareTokenMatch(token, story.shareToken)
+        ) {
             return NextResponse.json({ error: "Story not found" }, { status: 404 });
         }
 
