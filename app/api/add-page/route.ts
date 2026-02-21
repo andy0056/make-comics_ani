@@ -8,6 +8,7 @@ import {
   getStoryWithPagesBySlug,
 } from "@/lib/db-actions";
 import {
+  checkGenerationBurstLimit,
   reserveGenerationCredit,
   refundGenerationCredit,
 } from "@/lib/rate-limit";
@@ -111,6 +112,23 @@ export async function POST(request: NextRequest) {
     }
 
     idempotencyToken = idempotencyResult.token;
+
+    const burstLimitResult = await checkGenerationBurstLimit({
+      userId,
+      scope: "add-page",
+    });
+    if (!burstLimitResult.success) {
+      return NextResponse.json(
+        {
+          error:
+            "Too many page-generation attempts in a short time. Please wait a minute and retry.",
+          isRateLimited: true,
+          creditsRemaining: burstLimitResult.remaining,
+          resetTime: burstLimitResult.reset,
+        },
+        { status: 429 },
+      );
+    }
 
     const finalApiKey = process.env.TOGETHER_API_KEY;
     if (!finalApiKey) {

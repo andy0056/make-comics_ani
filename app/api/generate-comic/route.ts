@@ -9,6 +9,7 @@ import {
   getLastPageImage,
 } from "@/lib/db-actions";
 import {
+  checkGenerationBurstLimit,
   reserveGenerationCredit,
   refundGenerationCredit,
 } from "@/lib/rate-limit";
@@ -175,6 +176,23 @@ export async function POST(request: NextRequest) {
     }
 
     idempotencyToken = idempotencyResult.token;
+
+    const burstLimitResult = await checkGenerationBurstLimit({
+      userId,
+      scope: "generate-comic",
+    });
+    if (!burstLimitResult.success) {
+      return NextResponse.json(
+        {
+          error:
+            "Too many generation attempts in a short time. Please wait a minute and retry.",
+          isRateLimited: true,
+          creditsRemaining: burstLimitResult.remaining,
+          resetTime: burstLimitResult.reset,
+        },
+        { status: 429 },
+      );
+    }
 
     const usesOwnApiKey = false;
 

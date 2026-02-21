@@ -8,6 +8,7 @@ const {
   getNextPageNumberMock,
   getStoryByIdMock,
   getLastPageImageMock,
+  checkGenerationBurstLimitMock,
   reserveGenerationCreditMock,
   refundGenerationCreditMock,
   uploadImageToS3Mock,
@@ -28,6 +29,7 @@ const {
   getNextPageNumberMock: vi.fn(),
   getStoryByIdMock: vi.fn(),
   getLastPageImageMock: vi.fn(),
+  checkGenerationBurstLimitMock: vi.fn(),
   reserveGenerationCreditMock: vi.fn(),
   refundGenerationCreditMock: vi.fn(),
   uploadImageToS3Mock: vi.fn(),
@@ -56,6 +58,7 @@ vi.mock("@/lib/db-actions", () => ({
 }));
 
 vi.mock("@/lib/rate-limit", () => ({
+  checkGenerationBurstLimit: checkGenerationBurstLimitMock,
   reserveGenerationCredit: reserveGenerationCreditMock,
   refundGenerationCredit: refundGenerationCreditMock,
 }));
@@ -114,6 +117,12 @@ describe("api/generate-comic route", () => {
       kind: "acquired",
       token: { enabled: true, redisKey: "lock-1" },
     });
+    checkGenerationBurstLimitMock.mockResolvedValue({
+      success: true,
+      limit: 6,
+      remaining: 5,
+      reset: Date.now() + 60,
+    });
 
     reserveGenerationCreditMock.mockResolvedValue({
       success: true,
@@ -159,8 +168,30 @@ describe("api/generate-comic route", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ imageUrl: "https://cached" });
+    expect(checkGenerationBurstLimitMock).not.toHaveBeenCalled();
     expect(reserveGenerationCreditMock).not.toHaveBeenCalled();
     expect(generateComicImageWithAdapterFallbackMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 when burst generation limit is exceeded", async () => {
+    checkGenerationBurstLimitMock.mockResolvedValueOnce({
+      success: false,
+      limit: 6,
+      remaining: 0,
+      reset: 12345,
+    });
+
+    const response = await POST(buildRequest({ prompt: "hello" }));
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({
+      error:
+        "Too many generation attempts in a short time. Please wait a minute and retry.",
+      isRateLimited: true,
+      creditsRemaining: 0,
+      resetTime: 12345,
+    });
+    expect(reserveGenerationCreditMock).not.toHaveBeenCalled();
   });
 
   it("refunds credits when generation fails before persistence", async () => {
