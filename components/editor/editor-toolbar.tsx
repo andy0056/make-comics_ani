@@ -7,7 +7,8 @@ import {
   Download,
   Users,
   Globe,
-  Rocket
+  Rocket,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
@@ -24,6 +25,8 @@ interface EditorToolbarProps {
   onOpenCharacterBible?: () => void;
   onOpenUniverse?: () => void;
   onOpenPublish?: () => void;
+  isBotPanelOpen?: boolean;
+  onToggleBotPanel?: () => void;
 }
 
 export function EditorToolbar({
@@ -36,6 +39,8 @@ export function EditorToolbar({
   onOpenCharacterBible,
   onOpenUniverse,
   onOpenPublish,
+  isBotPanelOpen = false,
+  onToggleBotPanel,
 }: EditorToolbarProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -222,6 +227,24 @@ export function EditorToolbar({
           >
             <Rocket className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">Publish</span>
+          </Button>
+        )}
+
+        {onToggleBotPanel && (
+          <Button
+            variant="ghost"
+            onClick={onToggleBotPanel}
+            aria-pressed={isBotPanelOpen}
+            aria-label={isBotPanelOpen ? "Hide KaBoom Bot panel" : "Show KaBoom Bot panel"}
+            className={`gap-1.5 sm:gap-2 text-xs h-8 sm:h-9 px-2 sm:px-3 ${
+              isBotPanelOpen
+                ? "bg-indigo/20 text-indigo-300 hover:bg-indigo/25 hover:text-indigo-200"
+                : "text-muted-foreground hover:bg-secondary hover:text-white"
+            }`}
+            title={isBotPanelOpen ? "Hide KaBoom Bot" : "Show KaBoom Bot"}
+          >
+            <Bot className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Bot</span>
           </Button>
         )}
 

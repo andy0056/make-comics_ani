@@ -45,6 +45,36 @@ interface StoryData {
   isOwner?: boolean;
 }
 
+const BOT_PANEL_STORAGE_KEY = "kaboom:story-bot-open";
+
+function readBotPanelPreference(): boolean | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const value = window.localStorage.getItem(BOT_PANEL_STORAGE_KEY);
+    if (value === "true") return true;
+    if (value === "false") return false;
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function writeBotPanelPreference(isOpen: boolean): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(BOT_PANEL_STORAGE_KEY, String(isOpen));
+  } catch {
+    // Ignore storage write failures (private mode / quota / blocked storage).
+  }
+}
+
 export function StoryEditorClient() {
   const params = useParams();
   const slug = params.storySlug as string;
@@ -72,10 +102,37 @@ export function StoryEditorClient() {
   const { toast } = useToast();
   const isAdvancedMode = false;
   const [lastPanelLayout, setLastPanelLayout] = useState("5-panel");
+  const [isBotPanelOpen, setIsBotPanelOpen] = useState(true);
 
 
   const handleTitleUpdate = (newTitle: string) => {
     setStory(prev => prev ? { ...prev, title: newTitle } : null);
+  };
+
+  useEffect(() => {
+    const storedPreference = readBotPanelPreference();
+    if (storedPreference !== null) {
+      setIsBotPanelOpen(storedPreference);
+      return;
+    }
+
+    const isMobileOrTablet = window.matchMedia("(max-width: 1023px)").matches;
+    const defaultIsOpen = !isMobileOrTablet;
+    setIsBotPanelOpen(defaultIsOpen);
+    writeBotPanelPreference(defaultIsOpen);
+  }, []);
+
+  const handleToggleBotPanel = () => {
+    setIsBotPanelOpen((prev) => {
+      const next = !prev;
+      writeBotPanelPreference(next);
+      return next;
+    });
+  };
+
+  const handleCloseBotPanel = () => {
+    setIsBotPanelOpen(false);
+    writeBotPanelPreference(false);
   };
 
   // Load story and pages from API
@@ -510,6 +567,8 @@ export function StoryEditorClient() {
         onOpenCharacterBible={() => setShowCharacterBible(true)}
         onOpenUniverse={() => setShowUniverseSheet(true)}
         onOpenPublish={() => setShowPublishSheet(true)}
+        isBotPanelOpen={isBotPanelOpen}
+        onToggleBotPanel={handleToggleBotPanel}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -539,7 +598,10 @@ export function StoryEditorClient() {
             setCurrentPage((prev) => (prev > 0 ? prev - 1 : prev))
           }
         />
-        <AIGuideSidePanel />
+        <AIGuideSidePanel
+          isOpen={isBotPanelOpen}
+          onClose={handleCloseBotPanel}
+        />
       </div>
 
       <GeneratePageModal

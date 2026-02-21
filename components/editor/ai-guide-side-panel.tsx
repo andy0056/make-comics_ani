@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { usePathname, useParams } from "next/navigation";
-import { Send, Bot, Sparkles, Zap, HelpCircle, Copy, Check } from "lucide-react";
+import { Send, Bot, Sparkles, Zap, HelpCircle, Copy, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +20,11 @@ type Message = {
 };
 
 const CONTINUE_TRUNCATED_PROMPT = "Continue the previous answer from exactly where you stopped. Do not repeat prior text.";
+
+type AIGuideSidePanelProps = {
+    isOpen: boolean;
+    onClose: () => void;
+};
 
 const getSuggestedActions = (pathname: string) => {
     if (pathname === "/stories") {
@@ -41,7 +46,7 @@ const getSuggestedActions = (pathname: string) => {
     ];
 };
 
-export function AIGuideSidePanel() {
+export function AIGuideSidePanel({ isOpen, onClose }: AIGuideSidePanelProps) {
     const pathname = usePathname() || "/";
     const params = useParams() || {};
     const [messages, setMessages] = useState<Message[]>([
@@ -60,10 +65,14 @@ export function AIGuideSidePanel() {
     };
 
     useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
+        if (isOpen) {
+            scrollToBottom();
+        }
+    }, [messages, isOpen]);
 
     useEffect(() => {
+        if (!isOpen) return;
+
         const panel = document.getElementById("kaboom-bot-side-panel");
         if (!panel) return;
 
@@ -88,7 +97,7 @@ export function AIGuideSidePanel() {
             panel.removeEventListener("keydown", stopEvent);
             panel.removeEventListener("focusin", stopEvent);
         };
-    }, []);
+    }, [isOpen]);
 
     const handleSend = async (text: string = input) => {
         if (!text.trim() || isLoading) return;
@@ -176,6 +185,10 @@ export function AIGuideSidePanel() {
         return -1;
     })();
 
+    if (!isOpen) {
+        return null;
+    }
+
     return (
         <div id="kaboom-bot-side-panel" data-kaboom-bot-root="true" className="flex flex-col w-80 lg:w-96 border-l border-border bg-muted/20 h-full shrink-0">
             {/* Header */}
@@ -187,6 +200,16 @@ export function AIGuideSidePanel() {
                     <h3 className="font-semibold text-sm">KaBoom Bot</h3>
                     <p className="text-xs text-muted-foreground">Your AI Comic Guide</p>
                 </div>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={onClose}
+                    className="ml-auto h-8 w-8 text-muted-foreground hover:bg-white/10 hover:text-white"
+                    aria-label="Close KaBoom Bot panel"
+                >
+                    <X className="h-4 w-4" />
+                </Button>
             </div>
 
             {/* Messages Area */}
