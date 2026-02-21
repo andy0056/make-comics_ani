@@ -62,9 +62,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const isUsingFreeTier = true; // All generations go through rate limits now
     const usesOwnApiKey = false;
 
+    // Use default platform API key
+    const finalApiKey = process.env.TOGETHER_API_KEY;
+    if (!finalApiKey) {
+      return NextResponse.json(
+        {
+          error: "Server configuration error - default API key not available",
+        },
+        { status: 500 },
+      );
+    }
+
+    let story;
+    const referenceImages: string[] = [];
+
+    if (storyId) {
+      // Continuation: get previous page image and story character images
+      story = await getStoryById(storyId);
+      if (!story) {
+        return NextResponse.json({ error: "Story not found" }, { status: 404 });
+      }
+      if (story.userId !== userId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      }
+    }
+
+    // Consume credits only after auth + preflight validation has passed.
     const rateLimitResult = await freeTierRateLimit.limit(userId);
     if (!rateLimitResult.success) {
       return NextResponse.json(
@@ -79,31 +104,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use default platform API key
-    const finalApiKey = process.env.TOGETHER_API_KEY;
-    if (!finalApiKey) {
-      return NextResponse.json(
-        {
-          error: "Server configuration error - default API key not available",
-        },
-        { status: 500 },
-      );
-    }
-
     let page;
-    let story;
-    const referenceImages: string[] = [];
-
     if (storyId) {
-      // Continuation: get previous page image and story character images
-      story = await getStoryById(storyId);
-      if (!story) {
-        return NextResponse.json({ error: "Story not found" }, { status: 404 });
-      }
-      if (story.userId !== userId) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-      }
-
       const nextPageNumber = await getNextPageNumber(storyId);
       page = await createPage({
         storyId,

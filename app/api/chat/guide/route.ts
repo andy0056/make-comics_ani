@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Together from "together-ai";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import { auth } from "@clerk/nextjs/server";
 
 import { getStoryWithPagesBySlug } from "@/lib/db-actions";
 
@@ -57,11 +58,13 @@ export async function POST(req: Request) {
         }
 
         let databaseContext = "";
-        if (storySlug) {
+        if (typeof storySlug === "string" && storySlug.trim().length > 0) {
             try {
-                const storyData = await getStoryWithPagesBySlug(storySlug);
-                if (storyData) {
-                    databaseContext = `\n\n[DEEP STORY CONTEXT - The user is currently editing THIS specific story]
+                const { userId } = await auth();
+                if (userId) {
+                    const storyData = await getStoryWithPagesBySlug(storySlug);
+                    if (storyData && storyData.story.userId === userId) {
+                        databaseContext = `\n\n[DEEP STORY CONTEXT - The user is currently editing THIS specific story]
 Story Title: "${storyData.story.title}"
 Story Style: ${storyData.story.style}
 Generated Pages So Far: ${storyData.pages.length}
@@ -70,6 +73,7 @@ ${storyData.pages.length > 0 ? "Page Contents (What has happened so far):" : "No
 ${storyData.pages.map(p => `Page ${p.pageNumber}: ${p.prompt}`).join('\n')}
 
 Use the above story data to give highly specific, tailored advice. Refer to characters, actions, and settings that the user has already established in these pages.`
+                    }
                 }
             } catch (e) {
                 console.error("Failed to fetch deeper story context for bot:", e);

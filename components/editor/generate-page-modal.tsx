@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Upload, X, Loader2, Check, Sparkles, ChevronRight, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +44,6 @@ interface GeneratePageModalProps {
   // New props for context
   previousPagePrompt?: string;
   previousPageImage?: string;
-  storyTitle?: string;
   defaultPanelLayout?: string;
 }
 
@@ -64,6 +63,8 @@ const CONTINUATION_SPARKS = [
   { emoji: "🧩", label: "Clue", prompt: "Plant a mystery element — something feels off, a detail doesn't add up, curiosity deepens." },
   { emoji: "🎭", label: "Flashback", prompt: "Cut to a memory or past event that explains a character's current behavior or motivation." },
 ];
+
+const BOT_ROOT_SELECTOR = '[data-kaboom-bot-root="true"]';
 
 function getRandomSparks(count: number = 3): typeof CONTINUATION_SPARKS {
   const shuffled = [...CONTINUATION_SPARKS].sort(() => Math.random() - 0.5);
@@ -91,7 +92,6 @@ export function GeneratePageModal({
   isAdvancedMode = false,
   previousPagePrompt = "",
   previousPageImage = "",
-  storyTitle = "",
   defaultPanelLayout = "5-panel",
 }: GeneratePageModalProps) {
   const [prompt, setPrompt] = useState("");
@@ -152,7 +152,7 @@ export function GeneratePageModal({
 
       // Intelligently steal focus only if the user is not actively chatting with the bot
       const activeEl = document.activeElement;
-      if (!activeEl?.closest('#kaboom-bot-widget')) {
+      if (!activeEl?.closest(BOT_ROOT_SELECTOR)) {
         // Small timeout allows the modal to finish animating in
         setTimeout(() => {
           textareaRef.current?.focus();
@@ -179,7 +179,7 @@ export function GeneratePageModal({
       return sparkPrompt;
     });
     // Focus immediately without a timeout to prevent async focus stealing during pastes
-    if (textareaRef.current && !document.activeElement?.closest('#kaboom-bot-widget')) {
+    if (textareaRef.current && !document.activeElement?.closest(BOT_ROOT_SELECTOR)) {
       textareaRef.current.focus();
     }
   }, []);
@@ -314,7 +314,7 @@ export function GeneratePageModal({
         <DialogContent
           onInteractOutside={(e) => {
             const target = e.target as Element;
-            if (target.closest && target.closest('#kaboom-bot-widget')) {
+            if (target.closest && target.closest(BOT_ROOT_SELECTOR)) {
               e.preventDefault();
             }
           }}

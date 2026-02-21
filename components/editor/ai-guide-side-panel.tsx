@@ -119,7 +119,7 @@ export function AIGuideSidePanel() {
     };
 
     return (
-        <div className="flex flex-col w-80 lg:w-96 border-l border-border bg-muted/20 h-full shrink-0">
+        <div id="kaboom-bot-side-panel" data-kaboom-bot-root="true" className="flex flex-col w-80 lg:w-96 border-l border-border bg-muted/20 h-full shrink-0">
             {/* Header */}
             <div className="flex items-center gap-3 p-4 border-b border-border/60 bg-background/50 backdrop-blur-sm shrink-0">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo/10 text-indigo flex-shrink-0">

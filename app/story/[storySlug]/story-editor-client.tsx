@@ -549,7 +549,6 @@ export function StoryEditorClient() {
         previousPageImage={
           pages.length > 0 ? pages[pages.length - 1]?.image || "" : ""
         }
-        storyTitle={story?.title || ""}
         defaultPanelLayout={lastPanelLayout}
       />
       <PageInfoSheet

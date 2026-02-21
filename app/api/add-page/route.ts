@@ -55,20 +55,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rateLimitResult = await freeTierRateLimit.limit(userId);
-    if (!rateLimitResult.success) {
-      return NextResponse.json(
-        {
-          error:
-            "Credits exhausted. You are limited to 15 generations per week during the beta.",
-          isRateLimited: true,
-          creditsRemaining: rateLimitResult.remaining,
-          resetTime: rateLimitResult.reset,
-        },
-        { status: 429 },
-      );
-    }
-
     const finalApiKey = process.env.TOGETHER_API_KEY;
     if (!finalApiKey) {
       return NextResponse.json(
@@ -90,19 +76,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
+    const isRedraw = Boolean(pageId);
     let page;
     let pageNumber;
-    let isRedraw = false;
 
-    if (pageId) {
-      // Redraw mode: update existing page
-      isRedraw = true;
-      const storyData = await getStoryWithPagesBySlug(storyId);
-      if (!storyData) {
-        return NextResponse.json({ error: "Story not found" }, { status: 404 });
-      }
-
-      const existingPage = storyData.pages.find((p) => p.id === pageId);
+    if (isRedraw) {
+      const existingPage = pages.find((p) => p.id === pageId);
       if (!existingPage) {
         return NextResponse.json({ error: "Page not found" }, { status: 404 });
       }
@@ -110,8 +89,25 @@ export async function POST(request: NextRequest) {
       page = existingPage;
       pageNumber = existingPage.pageNumber;
     } else {
-      // Add new page mode
       pageNumber = await getNextPageNumber(story.id);
+    }
+
+    // Consume credits only after auth + story/page validation has passed.
+    const rateLimitResult = await freeTierRateLimit.limit(userId);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        {
+          error:
+            "Credits exhausted. You are limited to 15 generations per week during the beta.",
+          isRateLimited: true,
+          creditsRemaining: rateLimitResult.remaining,
+          resetTime: rateLimitResult.reset,
+        },
+        { status: 429 },
+      );
+    }
+
+    if (!isRedraw) {
       page = await createPage({
         storyId: story.id,
         pageNumber,
@@ -123,20 +119,14 @@ export async function POST(request: NextRequest) {
     const adapters = getImageModelAdapterProfiles();
     const dimensions = adapters[0].dimensions;
 
-    // Collect reference images: previous page + story characters + current characters
+    // Collect reference images: previous page + current characters
     const referenceImages: string[] = [];
 
     // Get previous page image for style consistency (unless it's page 1)
     if (pageNumber > 1) {
-      // Always use the previous page's image, regardless of new page or redraw
-      const storyData = await getStoryWithPagesBySlug(storyId);
-      if (storyData) {
-        const previousPage = storyData.pages.find(
-          (p) => p.pageNumber === pageNumber - 1,
-        );
-        if (previousPage?.generatedImageUrl) {
-          referenceImages.push(previousPage.generatedImageUrl);
-        }
+      const previousPage = pages.find((p) => p.pageNumber === pageNumber - 1);
+      if (previousPage?.generatedImageUrl) {
+        referenceImages.push(previousPage.generatedImageUrl);
       }
     }
 
@@ -188,7 +178,7 @@ export async function POST(request: NextRequest) {
       console.error("Image generation error:", error);
 
       // Clean up on failure (for new pages, not redraws)
-      if (!isRedraw) {
+      if (!isRedraw && page?.id) {
         try {
           await deletePage(page.id);
         } catch (cleanupError) {
