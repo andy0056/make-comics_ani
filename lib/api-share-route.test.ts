@@ -125,7 +125,7 @@ describe("api/share/[storySlug]", () => {
 
   it("returns story + pages for valid token", async () => {
     const req = new NextRequest(
-      "http://localhost/api/share/story-slug?token=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "http://localhost/api/share/story-slug?token=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
     );
 
     selectMock
