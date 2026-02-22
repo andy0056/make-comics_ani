@@ -4,16 +4,18 @@ import { getOwnedStoryWithPagesBySlug } from "@/lib/story-access";
 import {
   getRequestValidationErrorMessage,
   storySlugParamSchema,
+  universeActivityQuerySchema,
 } from "@/lib/api-request-validation";
+import { checkStoryReadBurstLimit } from "@/lib/rate-limit";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ storySlug: string }> },
 ) {
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
     const parsedParams = storySlugParamSchema.safeParse(await params);
@@ -24,6 +26,30 @@ export async function GET(
       );
     }
     const slug = parsedParams.data.storySlug;
+    const queryObject = Object.fromEntries(new URL(request.url).searchParams.entries());
+    const parsedQuery = universeActivityQuerySchema.safeParse(queryObject);
+    if (!parsedQuery.success) {
+      return NextResponse.json(
+        { error: getRequestValidationErrorMessage(parsedQuery.error) },
+        { status: 400 },
+      );
+    }
+
+    const readLimit = await checkStoryReadBurstLimit({
+      userId,
+      scope: "universe-activity",
+    });
+    if (!readLimit.success) {
+      return NextResponse.json(
+        {
+          error: "Too many read requests. Please wait a moment and retry.",
+          isRateLimited: true,
+          resetTime: readLimit.reset,
+        },
+        { status: 429 },
+      );
+    }
+
     const accessResult = await getOwnedStoryWithPagesBySlug({
       storySlug: slug,
       userId,

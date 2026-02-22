@@ -14,6 +14,12 @@ const MAX_CHARACTER_TEXT_CHARS = 500;
 const MAX_CHARACTERS = 6;
 const MAX_UPLOAD_FILENAME_CHARS = 180;
 const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_UNIVERSE_ACTIVITY_DAYS = 30;
+const MAX_UNIVERSE_ACTIVITY_LIMIT = 100;
+const MAX_UNIVERSE_INTERACTIVE_MAX_NODES = 100;
+const DEFAULT_UNIVERSE_ACTIVITY_DAYS = 14;
+const DEFAULT_UNIVERSE_ACTIVITY_LIMIT = 24;
+const DEFAULT_UNIVERSE_INTERACTIVE_MAX_NODES = 60;
 
 const styleIds = new Set(COMIC_STYLES.map((style) => style.id));
 const panelLayoutIds = new Set(PANEL_LAYOUTS.map((layout) => layout.id));
@@ -127,6 +133,35 @@ const SHARE_TOKEN_PATTERN = /^[a-f0-9]{32}$/i;
 export const shareTokenQuerySchema = z.object({
   token: z.string().trim().regex(SHARE_TOKEN_PATTERN, "Invalid share token"),
 });
+
+export const universeActivityQuerySchema = z
+  .object({
+    days: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_UNIVERSE_ACTIVITY_DAYS)
+      .default(DEFAULT_UNIVERSE_ACTIVITY_DAYS),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_UNIVERSE_ACTIVITY_LIMIT)
+      .default(DEFAULT_UNIVERSE_ACTIVITY_LIMIT),
+  })
+  .strict();
+
+export const universeInteractiveQuerySchema = z
+  .object({
+    focusStoryId: z.string().trim().uuid("Invalid focusStoryId").optional(),
+    maxNodes: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_UNIVERSE_INTERACTIVE_MAX_NODES)
+      .default(DEFAULT_UNIVERSE_INTERACTIVE_MAX_NODES),
+  })
+  .strict();
 
 function isHttpUrl(value: string): boolean {
   try {
