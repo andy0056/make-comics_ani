@@ -5,6 +5,7 @@ import {
   getRequestValidationErrorMessage,
   storySlugParamSchema,
 } from "@/lib/api-request-validation";
+import { checkStoryReadBurstLimit } from "@/lib/rate-limit";
 
 export async function GET(
   _request: Request,
@@ -13,7 +14,7 @@ export async function GET(
   try {
     const { userId } = await auth();
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
     const parsedParams = storySlugParamSchema.safeParse(await params);
@@ -24,6 +25,20 @@ export async function GET(
       );
     }
     const slug = parsedParams.data.storySlug;
+    const readLimit = await checkStoryReadBurstLimit({
+      userId,
+      scope: "co-creation-rooms",
+    });
+    if (!readLimit.success) {
+      return NextResponse.json(
+        {
+          error: "Too many read requests. Please wait a moment and retry.",
+          isRateLimited: true,
+          resetTime: readLimit.reset,
+        },
+        { status: 429 },
+      );
+    }
     const accessResult = await getOwnedStoryWithPagesBySlug({
       storySlug: slug,
       userId,

@@ -3,6 +3,7 @@ import { Redis } from "@upstash/redis";
 
 const WEEKLY_CREDIT_LIMIT = 15;
 const BURST_LIMIT_PER_MINUTE = 6;
+const STORY_READ_BURST_LIMIT_PER_MINUTE = 120;
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -52,6 +53,16 @@ const generationBurstRateLimit =
         prefix: "ratelimit:generation-burst",
       });
 
+const storyReadBurstRateLimit =
+  redis === null
+    ? null
+    : new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(STORY_READ_BURST_LIMIT_PER_MINUTE, "1 m"),
+        analytics: true,
+        prefix: "ratelimit:story-read-burst",
+      });
+
 export async function reserveGenerationCredit(userId: string): Promise<RateLimitResult> {
   if (!freeTierRateLimit) {
     return defaultSuccessResult(WEEKLY_CREDIT_LIMIT);
@@ -92,4 +103,18 @@ export async function checkGenerationBurstLimit({
   }
 
   return generationBurstRateLimit.limit(`${scope}:${userId}`);
+}
+
+export async function checkStoryReadBurstLimit({
+  userId,
+  scope,
+}: {
+  userId: string;
+  scope: "universe" | "universe-activity" | "universe-interactive" | "collaborators" | "co-creation-rooms";
+}): Promise<RateLimitResult> {
+  if (!storyReadBurstRateLimit) {
+    return defaultSuccessResult(STORY_READ_BURST_LIMIT_PER_MINUTE);
+  }
+
+  return storyReadBurstRateLimit.limit(`${scope}:${userId}`);
 }

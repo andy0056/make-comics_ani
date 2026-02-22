@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authMock, getOwnedStoryWithPagesBySlugMock } = vi.hoisted(() => ({
+const {
+  authMock,
+  getOwnedStoryWithPagesBySlugMock,
+  checkStoryReadBurstLimitMock,
+} = vi.hoisted(() => ({
   authMock: vi.fn(),
   getOwnedStoryWithPagesBySlugMock: vi.fn(),
+  checkStoryReadBurstLimitMock: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({
@@ -11,6 +16,10 @@ vi.mock("@clerk/nextjs/server", () => ({
 
 vi.mock("@/lib/story-access", () => ({
   getOwnedStoryWithPagesBySlug: getOwnedStoryWithPagesBySlugMock,
+}));
+
+vi.mock("@/lib/rate-limit", () => ({
+  checkStoryReadBurstLimit: checkStoryReadBurstLimitMock,
 }));
 
 import { GET as getUniverse } from "@/app/api/stories/[storySlug]/universe/route";
@@ -47,6 +56,12 @@ describe("story universe and collaboration routes", () => {
     vi.clearAllMocks();
     authMock.mockResolvedValue({ userId: "user-1" });
     getOwnedStoryWithPagesBySlugMock.mockResolvedValue(accessResultOk);
+    checkStoryReadBurstLimitMock.mockResolvedValue({
+      success: true,
+      limit: 120,
+      remaining: 119,
+      reset: 12345,
+    });
   });
 
   describe("api/stories/[storySlug]/universe", () => {
@@ -56,8 +71,9 @@ describe("story universe and collaboration routes", () => {
       const response = await getUniverse(new Request("http://localhost"), validParams);
 
       expect(response.status).toBe(401);
-      expect(await response.json()).toEqual({ error: "Unauthorized" });
+      expect(await response.json()).toEqual({ error: "Authentication required" });
       expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
+      expect(checkStoryReadBurstLimitMock).not.toHaveBeenCalled();
     });
 
     it("rejects invalid storySlug params", async () => {
@@ -66,6 +82,25 @@ describe("story universe and collaboration routes", () => {
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
         error: expect.stringContaining("storySlug"),
+      });
+      expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
+    });
+
+    it("returns 429 when read burst limit is exceeded", async () => {
+      checkStoryReadBurstLimitMock.mockResolvedValueOnce({
+        success: false,
+        limit: 120,
+        remaining: 0,
+        reset: 999,
+      });
+
+      const response = await getUniverse(new Request("http://localhost"), validParams);
+
+      expect(response.status).toBe(429);
+      expect(await response.json()).toEqual({
+        error: "Too many read requests. Please wait a moment and retry.",
+        isRateLimited: true,
+        resetTime: 999,
       });
       expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
     });
@@ -104,6 +139,34 @@ describe("story universe and collaboration routes", () => {
   });
 
   describe("api/stories/[storySlug]/universe/activity", () => {
+    it("rejects invalid query params", async () => {
+      const response = await getUniverseActivity(
+        new Request("http://localhost?days=999&limit=24"),
+        validParams,
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: expect.stringContaining("days"),
+      });
+      expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
+      expect(checkStoryReadBurstLimitMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects unknown query params", async () => {
+      const response = await getUniverseActivity(
+        new Request("http://localhost?days=7&limit=24&debug=true"),
+        validParams,
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: expect.stringMatching(/unrecognized|unknown/i),
+      });
+      expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
+      expect(checkStoryReadBurstLimitMock).not.toHaveBeenCalled();
+    });
+
     it("returns upstream access errors", async () => {
       getOwnedStoryWithPagesBySlugMock.mockResolvedValueOnce(accessResultNotFound);
 
@@ -116,9 +179,31 @@ describe("story universe and collaboration routes", () => {
       expect(await response.json()).toEqual({ error: "Story not found" });
     });
 
+    it("returns 429 when read burst limit is exceeded", async () => {
+      checkStoryReadBurstLimitMock.mockResolvedValueOnce({
+        success: false,
+        limit: 120,
+        remaining: 0,
+        reset: 111,
+      });
+
+      const response = await getUniverseActivity(
+        new Request("http://localhost?days=7&limit=24"),
+        validParams,
+      );
+
+      expect(response.status).toBe(429);
+      expect(await response.json()).toEqual({
+        error: "Too many read requests. Please wait a moment and retry.",
+        isRateLimited: true,
+        resetTime: 111,
+      });
+      expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
+    });
+
     it("returns activity payload for authorized access", async () => {
       const response = await getUniverseActivity(
-        new Request("http://localhost"),
+        new Request("http://localhost?days=7&limit=24"),
         validParams,
       );
 
@@ -152,9 +237,59 @@ describe("story universe and collaboration routes", () => {
       expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
     });
 
+    it("rejects invalid query params", async () => {
+      const response = await getUniverseInteractive(
+        new Request("http://localhost?focusStoryId=bad&maxNodes=1000"),
+        validParams,
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: expect.stringMatching(/focusStoryId|maxNodes/),
+      });
+      expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
+      expect(checkStoryReadBurstLimitMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects unknown query params", async () => {
+      const response = await getUniverseInteractive(
+        new Request("http://localhost?maxNodes=60&debug=true"),
+        validParams,
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: expect.stringMatching(/unrecognized|unknown/i),
+      });
+      expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
+      expect(checkStoryReadBurstLimitMock).not.toHaveBeenCalled();
+    });
+
+    it("returns 429 when read burst limit is exceeded", async () => {
+      checkStoryReadBurstLimitMock.mockResolvedValueOnce({
+        success: false,
+        limit: 120,
+        remaining: 0,
+        reset: 222,
+      });
+
+      const response = await getUniverseInteractive(
+        new Request("http://localhost?maxNodes=60"),
+        validParams,
+      );
+
+      expect(response.status).toBe(429);
+      expect(await response.json()).toEqual({
+        error: "Too many read requests. Please wait a moment and retry.",
+        isRateLimited: true,
+        resetTime: 222,
+      });
+      expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
+    });
+
     it("returns interactive payload for authorized access", async () => {
       const response = await getUniverseInteractive(
-        new Request("http://localhost"),
+        new Request("http://localhost?maxNodes=60"),
         validParams,
       );
 
@@ -176,7 +311,30 @@ describe("story universe and collaboration routes", () => {
       );
 
       expect(response.status).toBe(401);
-      expect(await response.json()).toEqual({ error: "Unauthorized" });
+      expect(await response.json()).toEqual({ error: "Authentication required" });
+      expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
+      expect(checkStoryReadBurstLimitMock).not.toHaveBeenCalled();
+    });
+
+    it("returns 429 when read burst limit is exceeded", async () => {
+      checkStoryReadBurstLimitMock.mockResolvedValueOnce({
+        success: false,
+        limit: 120,
+        remaining: 0,
+        reset: 333,
+      });
+
+      const response = await getCollaborators(
+        new Request("http://localhost"),
+        validParams,
+      );
+
+      expect(response.status).toBe(429);
+      expect(await response.json()).toEqual({
+        error: "Too many read requests. Please wait a moment and retry.",
+        isRateLimited: true,
+        resetTime: 333,
+      });
       expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
     });
 
@@ -205,6 +363,28 @@ describe("story universe and collaboration routes", () => {
 
       expect(response.status).toBe(404);
       expect(await response.json()).toEqual({ error: "Story not found" });
+    });
+
+    it("returns 429 when read burst limit is exceeded", async () => {
+      checkStoryReadBurstLimitMock.mockResolvedValueOnce({
+        success: false,
+        limit: 120,
+        remaining: 0,
+        reset: 444,
+      });
+
+      const response = await getCoCreationRooms(
+        new Request("http://localhost"),
+        validParams,
+      );
+
+      expect(response.status).toBe(429);
+      expect(await response.json()).toEqual({
+        error: "Too many read requests. Please wait a moment and retry.",
+        isRateLimited: true,
+        resetTime: 444,
+      });
+      expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
     });
 
     it("returns rooms payload for authorized access", async () => {

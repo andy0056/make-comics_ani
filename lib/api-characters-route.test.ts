@@ -79,6 +79,23 @@ describe("api/stories/[storySlug]/characters route", () => {
     });
   });
 
+  it("requires authentication", async () => {
+    authMock.mockResolvedValueOnce({ userId: null });
+
+    const response = await PUT(
+      buildRequest(JSON.stringify({ characters: [] })),
+      {
+        params: Promise.resolve({ storySlug: "story-slug" }),
+      },
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "Authentication required" });
+    expect(getOwnedStoryWithPagesBySlugMock).not.toHaveBeenCalled();
+    expect(dbDeleteMock).not.toHaveBeenCalled();
+    expect(dbInsertMock).not.toHaveBeenCalled();
+  });
+
   it("rejects invalid payload without mutating existing characters", async () => {
     const response = await PUT(buildRequest(JSON.stringify({ characters: "bad" })), {
       params: Promise.resolve({ storySlug: "story-slug" }),
